@@ -1,0 +1,25 @@
+# Postgres local para desenvolvimento e testes de integração.
+# Mesma versão major do Neon (padrão de pg_version na API do Neon: 18).
+name: observatorio
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: observatorio
+      POSTGRES_PASSWORD: observatorio
+      POSTGRES_DB: observatorio
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # A partir do Postgres 18 a imagem oficial guarda os dados em
+      # /var/lib/postgresql/<major>/docker; o volume vai no diretório pai.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U observatorio -d observatorio"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres-data:

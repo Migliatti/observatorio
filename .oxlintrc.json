@@ -1,0 +1,67 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "node": true,
+    "es2024": true
+  },
+  "ignorePatterns": ["dist/**", "node_modules/**", "src/db/generated/**"],
+  "rules": {
+    "typescript/consistent-type-imports": "error",
+    "import/no-cycle": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/api/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/collect", "**/collect/**"],
+                "message": "api must not import collect; share code through db or domain."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/collect/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/api", "**/api/**"],
+                "message": "collect must not import api; share code through db or domain."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/domain/**/*.ts", "src/sources/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/api", "**/api/**", "**/collect", "**/collect/**", "**/db", "**/db/**"],
+                "message": "domain and sources are pure: no api, collect or db imports."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

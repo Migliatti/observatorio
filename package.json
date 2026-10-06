@@ -1,6 +1,43 @@
 {
+  "name": "observatorio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agregador de dados astronômicos: coleta fontes públicas, guarda o histórico e serve por uma API própria.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/api/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --env-file-if-exists=.env dist/api/server.js",
+    "collect": "tsx --env-file-if-exists=.env src/collect/cli.ts",
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts && npm run db:codegen",
+    "db:codegen": "kysely-codegen --dialect postgres --out-file src/db/generated/database.ts --exclude-pattern \"kysely_migration*\"",
+    "db:codegen:check": "npm run db:codegen -- --verify"
+  },
   "dependencies": {
+    "@fastify/swagger": "^9.9.1",
     "@neon/config": "^1.8.4",
-    "@neon/env": "^1.5.1"
+    "@neon/env": "^1.5.1",
+    "fastify": "^5.12.5",
+    "kysely": "^0.29.6",
+    "pg": "^8.23.1",
+    "typebox": "^1.3.36"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/pg": "^8.23.1",
+    "kysely-codegen": "^0.20.0",
+    "oxlint": "^1.87.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   }
 }

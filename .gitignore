@@ -1,4 +1,9 @@
-.neon
-.env.local
 node_modules/
+dist/
+coverage/
 .env
+.env.*
+!.env.example
+.env.local
+.neon
+*.log
