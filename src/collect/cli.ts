@@ -3,4 +3,7 @@
 // Must never import from `src/api`; shares only `db`, `domain` and `sources`.
 import { main } from './main.js';
 
-process.exitCode = await main(process.argv.slice(2), { databaseUrl: process.env.DATABASE_URL });
+process.exitCode = await main(process.argv.slice(2), {
+  databaseUrl: process.env.DATABASE_URL,
+  nasaApiKey: process.env.NASA_API_KEY,
+});

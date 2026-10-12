@@ -1,6 +1,7 @@
 // Stores a coleta of the Exoplanet Archive: upserts every exoplaneta seen and marks the missing ones as removed.
 import { sql, type Transaction } from 'kysely';
 import type { DB } from '../db/generated/database.js';
+import { exoplanetContentHash, exoplanetParameters } from '../domain/exoplanet.js';
 import { EXOPLANET_FIELDS, fetchExoplanetArchive, type ArchiveExoplanet } from '../sources/exoplanet-archive.js';
 import type { HttpOptions } from '../sources/http.js';
 import type { CollectionCounts, Collector } from './run.js';
@@ -18,21 +19,44 @@ export async function storeExoplanets(
   now: Date,
 ): Promise<CollectionCounts> {
   const existing = new Map(
-    (await trx.selectFrom('exoplanet').select(['name', ...EXOPLANET_FIELDS]).execute()).map((row) => [row.name, row]),
+    (await trx.selectFrom('exoplanet').select(['id', 'content_hash', ...EXOPLANET_FIELDS]).execute()).map((row) => [row.name, row]),
   );
 
   let created = 0;
   let revised = 0;
+  const revisions = [];
+  const hashes = new Map<string, string>();
   for (const planet of planets) {
+    const hash = exoplanetContentHash(planet);
+    hashes.set(planet.name, hash);
     const previous = existing.get(planet.name);
     if (!previous) created++;
-    else if (EXOPLANET_FIELDS.some((field) => previous[field] !== planet[field])) revised++;
+    else {
+      // Rows collected before hashes were introduced are compared by their typed parameters.
+      // This backfills their hash without manufacturing a revision for an unchanged exoplaneta.
+      const previousHash = previous.content_hash ?? exoplanetContentHash(previous);
+      if (previousHash !== hash) {
+        revised++;
+        revisions.push({
+          exoplanet_id: previous.id,
+          parameters: JSON.stringify(exoplanetParameters(previous)),
+          content_hash: previousHash,
+          recorded_at: now,
+        });
+      }
+    }
+  }
+
+  // The previous parameters are appended before replacement, in the same coleta transaction.
+  for (let start = 0; start < revisions.length; start += BATCH_SIZE) {
+    await trx.insertInto('exoplanet_revision').values(revisions.slice(start, start + BATCH_SIZE)).execute();
   }
 
   for (let start = 0; start < planets.length; start += BATCH_SIZE) {
     const rows = planets.slice(start, start + BATCH_SIZE).map(({ raw, ...fields }) => ({
       ...fields,
       raw: JSON.stringify(raw),
+      content_hash: hashes.get(fields.name)!,
       first_seen_at: now,
       last_seen_at: now,
       removed_at: null,
@@ -44,6 +68,7 @@ export async function storeExoplanets(
         oc.column('name').doUpdateSet((eb) => ({
           ...Object.fromEntries(EXOPLANET_FIELDS.map((field) => [field, eb.ref(`excluded.${field}`)])),
           raw: eb.ref('excluded.raw'),
+          content_hash: eb.ref('excluded.content_hash'),
           last_seen_at: eb.ref('excluded.last_seen_at'),
           // A planeta removido that comes back is no longer removed.
           removed_at: null,

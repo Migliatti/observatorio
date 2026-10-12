@@ -3,6 +3,7 @@ import { createDatabase, type Database } from '../db/database.js';
 import { SOURCES, isSource, type Source } from '../domain/source.js';
 import type { HttpOptions } from '../sources/http.js';
 import { exoplanetArchiveCollector } from './exoplanet-archive.js';
+import { neoWsCollector } from './neows.js';
 import { runCollection, type CollectionResult } from './run.js';
 
 export interface CliDependencies {
@@ -10,6 +11,8 @@ export interface CliDependencies {
   databaseUrl: string | undefined;
   /** HTTP settings for the fontes; tests inject a fetch that serves fixtures. */
   http?: HttpOptions;
+  /** Required only for coleta of NeoWs. */
+  nasaApiKey?: string | undefined;
   now?: () => Date;
   log?: (message: string) => void;
   logError?: (message: string) => void;
@@ -28,6 +31,11 @@ export async function main(args: readonly string[], deps: CliDependencies): Prom
   const url = deps.databaseUrl;
   if (!url || !/^postgres(ql)?:\/\/.+/.test(url)) {
     logError('DATABASE_URL is missing or is not a postgres:// connection string. See .env.example.');
+    return 1;
+  }
+
+  if (source === 'neows' && !deps.nasaApiKey?.trim()) {
+    logError('NASA_API_KEY is missing. See .env.example.');
     return 1;
   }
 
@@ -52,6 +60,6 @@ function collect(db: Database, source: Source, deps: CliDependencies): Promise<C
     case 'exoplanet-archive':
       return runCollection(db, source, exoplanetArchiveCollector(deps.http), deps.now);
     case 'neows':
-      return Promise.reject(new Error('Coleta of "neows" is not implemented yet.'));
+      return runCollection(db, source, neoWsCollector(deps.nasaApiKey!, deps.now, deps.http), deps.now);
   }
 }

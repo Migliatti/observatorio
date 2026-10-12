@@ -25,7 +25,34 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface Asteroid {
+  absolute_magnitude_h: number | null;
+  estimated_diameter_max_km: number | null;
+  estimated_diameter_min_km: number | null;
+  first_seen_at: Timestamp;
+  id: Generated<Int8>;
+  is_potentially_hazardous: boolean;
+  jpl_id: string;
+  last_seen_at: Timestamp;
+  name: string;
+  raw: Json;
+}
+
+export interface CloseApproach {
+  approach_at: Timestamp;
+  asteroid_id: Int8;
+  date: Timestamp;
+  first_seen_at: Timestamp;
+  id: Generated<Int8>;
+  last_seen_at: Timestamp;
+  miss_distance_km: number | null;
+  orbiting_body: string | null;
+  raw: Json;
+  relative_velocity_kms: number | null;
+}
+
 export interface Exoplanet {
+  content_hash: string | null;
   dec_deg: number | null;
   discovery_facility: string | null;
   discovery_method: string | null;
@@ -53,6 +80,14 @@ export interface Exoplanet {
   system_star_count: number | null;
 }
 
+export interface ExoplanetRevision {
+  content_hash: string;
+  exoplanet_id: Int8;
+  id: Generated<Int8>;
+  parameters: Json;
+  recorded_at: Timestamp;
+}
+
 export interface IngestionRun {
   created_count: number | null;
   error: string | null;
@@ -66,6 +101,9 @@ export interface IngestionRun {
 }
 
 export interface DB {
+  asteroid: Asteroid;
+  close_approach: CloseApproach;
   exoplanet: Exoplanet;
+  exoplanet_revision: ExoplanetRevision;
   ingestion_run: IngestionRun;
 }

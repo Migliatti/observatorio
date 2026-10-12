@@ -1,4 +1,5 @@
 // Exoplanet Archive fonte: the composite parameters table (pscomppars), one row per exoplaneta.
+import type { ExoplanetParameters } from '../domain/exoplanet.js';
 import { getText, snippet, type HttpOptions } from './http.js';
 
 /** Archive column → our column. Units follow the Archive's; they are named in our column. */
@@ -33,27 +34,7 @@ export const EXOPLANET_ARCHIVE_URL =
   new URLSearchParams({ query: `select ${ARCHIVE_COLUMNS.join(',')} from pscomppars`, format: 'json' }).toString();
 
 /** One exoplaneta as read from the Archive: typed fields plus the original row. */
-export interface ArchiveExoplanet {
-  name: string;
-  host_name: string | null;
-  discovery_method: string | null;
-  discovery_year: number | null;
-  discovery_facility: string | null;
-  orbital_period_days: number | null;
-  semi_major_axis_au: number | null;
-  eccentricity: number | null;
-  radius_earth_radii: number | null;
-  mass_earth_masses: number | null;
-  equilibrium_temperature_k: number | null;
-  insolation_earth_flux: number | null;
-  distance_pc: number | null;
-  ra_deg: number | null;
-  dec_deg: number | null;
-  star_effective_temperature_k: number | null;
-  star_radius_solar_radii: number | null;
-  star_mass_solar_masses: number | null;
-  system_star_count: number | null;
-  system_planet_count: number | null;
+export interface ArchiveExoplanet extends ExoplanetParameters {
   /** The Archive row exactly as received. */
   raw: Record<string, unknown>;
 }

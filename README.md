@@ -29,7 +29,7 @@ A API valida as variáveis de ambiente no boot e não sobe com configuração in
 | `db:up` / `db:down` | Sobe / derruba o Postgres do docker-compose |
 | `db:migrate` | Migrations pelo `Migrator` do Kysely (só para frente) e `db:codegen` em seguida |
 | `db:codegen` / `db:codegen:check` | Regera / confere os tipos em `src/db/generated` |
-| `collect` | Coleta do Exoplanet Archive: `npm run collect -- exoplanet-archive` (conexão direta em `DATABASE_URL`) |
+| `collect` | Coleta: `npm run collect -- exoplanet-archive` ou `npm run collect -- neows` (conexão direta em `DATABASE_URL`) |
 
 ## Testes
 
@@ -50,3 +50,7 @@ O Vitest lê o `.env` (variáveis já definidas no ambiente têm prioridade). Co
 ## Migrations
 
 Arquivos `src/db/migrations/NNNN_descricao.ts`, exportando só `up` com SQL puro. Não existe `down`: para desfazer, escreva uma nova migration.
+
+## Coleta do NeoWs
+
+Configure `NASA_API_KEY` e execute `npm run collect -- neows`. Cada coleta pede um feed único de hoje em UTC até +6 dias, com retry para falhas temporárias. Asteroides usam o id do JPL; aproximações usam o asteroide e a data UTC derivada do epoch da fonte. Previsões de hoje e futuras são reescritas; aproximações de dias passados ficam congeladas. As contagens vistas, criadas e revisadas da execução referem-se às aproximações. A API não precisa da chave da NASA.
