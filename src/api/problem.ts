@@ -6,7 +6,7 @@ export const problemSchema = Type.Object({
 });
 export function problem(reply: FastifyReply, status: number, code: string, detail: string) {
   return reply.code(status).type('application/problem+json').send({
-    type: 'about:blank', title: status === 404 ? 'Not Found' : status === 400 ? 'Bad Request' : 'Internal Server Error', status, code, detail,
+    type: 'about:blank', title: status === 404 ? 'Not Found' : status === 401 ? 'Unauthorized' : status === 400 ? 'Bad Request' : 'Internal Server Error', status, code, detail,
   });
 }
 export function installProblemHandler(app: FastifyInstance): void {

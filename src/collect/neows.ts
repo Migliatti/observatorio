@@ -1,11 +1,27 @@
 import { sql, type Transaction } from 'kysely';
 import type { DB } from '../db/generated/database.js';
-import { fetchNeoWs, type NeoWsFeed } from '../sources/neows.js';
+import { fetchNeoWs, neoWsFeedUrl, type NeoWsFeed } from '../sources/neows.js';
 import type { HttpOptions } from '../sources/http.js';
 import type { CollectionCounts, Collector } from './run.js';
 
 export function neoWsCollector(apiKey: string, now: () => Date = () => new Date(), http: HttpOptions = {}): Collector<NeoWsFeed> {
-  return { fetch: () => fetchNeoWs(apiKey, now(), http), store: storeNeoWs };
+  let coverage: { from: string; to: string } | null = null;
+  return {
+    fetch: () => {
+      // Capture the exact requested window before I/O, even if midnight passes before publication.
+      const requestedAt = now();
+      const params = new URL(neoWsFeedUrl(apiKey, requestedAt)).searchParams;
+      coverage = { from: params.get('start_date')!, to: params.get('end_date')! };
+      return fetchNeoWs(apiKey, requestedAt, http);
+    },
+    store: storeNeoWs,
+    publish: async (trx, runId) => {
+      if (!coverage) throw new Error('NeoWs coverage is missing.');
+      await trx.updateTable('ingestion_run').set({
+        coverage_from: sql<Date>`${coverage.from}::date`, coverage_to: sql<Date>`${coverage.to}::date`,
+      }).where('id', '=', runId).execute();
+    },
+  };
 }
 
 /** Counts refer to aproximações, the records collected by the rolling feed. */

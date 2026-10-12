@@ -1,5 +1,23 @@
 # Exoplanetas (`/v1`)
 
+Todas as rotas de dados exigem `Authorization: Bearer obs_…`.
+Crie a chave com `npm run keys -- create kepler-lab`; ela contém 32 bytes
+aleatórios em base64url e aparece somente na criação. O banco guarda o SHA-256,
+um prefixo de identificação, o consumidor e os instantes de criação, uso e
+revogação. `npm run keys -- list` lista os metadados seguros e
+`npm run keys -- revoke <id>` revoga uma chave. Para rotacionar, crie outra e
+revogue a anterior.
+
+Chave ausente, inválida ou revogada responde `401 invalid_api_key` no mesmo
+formato `problem+json`. A validação tem cache por 60 segundos em cada instância;
+uma chave recém-revogada pode continuar aceita até esse prazo. O instante
+`last_used_at` é atualizado no máximo uma vez a cada cinco minutos por chave.
+
+`/health`, `/v1/status`, `/v1/openapi.json` e `/docs` continuam acessíveis sem chave.
+O status expõe o resultado e fim da última coleta de cada fonte em `data.sources`
+e o frescor da última coleta bem-sucedida em `meta.sources`. O OpenAPI descreve
+os schemas e a autenticação Bearer das rotas; `/docs` contém o guia público.
+
 `GET /v1/exoplanets` retorna `{ data: [], meta: { sources: [], next_cursor, updates_available, snapshot_expires_at } }`.
 Cada item contém apenas campos tipados em `snake_case`; valores ausentes são `null`.
 `id` é uma string decimal para preservar a precisão de `bigint`.
@@ -64,6 +82,50 @@ O crédito do Archive inclui a frase de agradecimento oficial e a referência
 Christiansen et al. (2025), que substitui Akeson et al. (2013), conforme
 [a orientação do Archive](https://exoplanetarchive.ipac.caltech.edu/docs/acknowledge.html).
 
+## Revisões
+
+`GET /v1/exoplanets/{name}/revisions` retorna as revisões permanentes, da mais
+nova para a mais antiga, com `id`, `parameters` (campos tipados), `recorded_at`
+e `changed_fields[]`. A coleta guarda os parâmetros anteriores quando detecta
+uma alteração. Cada revisão é comparada com a revisão cronologicamente anterior;
+a mais antiga tem `changed_fields: []`, porque não existe uma revisão anterior.
+O estado atual permanece na rota de detalhe.
+
+O envelope é `{ data: [], meta: { sources: [], next_cursor } }`.
+`limit` aceita 1 a 200 e tem padrão 50. Continue com `cursor` mantendo o nome e
+`include_removed` (padrão `false`); é permitido mudar `limit`. A lista fica
+limitada às revisões existentes no início da navegação, e usa `id` para desempatar
+instantes iguais. Sem histórico, a lista é vazia; nome inexistente ou removido
+responde `404 not_found`, salvo `include_removed=true` para removidos.
+Os cursores de revisões expiram em 48 horas ou após reinício do processo;
+`400 invalid_cursor` pede reinício da paginação.
+
+## Aproximações
+
+`GET /v1/close-approaches` lista aproximações em ordem de data ascendente,
+com `id` interno como desempate. Cada item contém `date` (`YYYY-MM-DD` em UTC),
+`miss_distance_km`, `relative_velocity_kms`, `orbiting_body` e `asteroid`.
+O asteroide traz `id` (código JPL), `name`, `absolute_magnitude_h`,
+`estimated_diameter_min_km`, `estimated_diameter_max_km` e
+`is_potentially_hazardous`. Valores ausentes são `null`; o `raw` não é exposto.
+
+`from` e `to` aceitam datas UTC inclusivas. Quando omitidos, valem hoje e hoje
++6 dias, respectivamente. Datas inválidas, ordem invertida ou janela com mais
+de 366 dias inclusivos respondem `400 invalid_input`. `hazardous=true` filtra
+os potencialmente perigosos; `false` ou ausência inclui ambos.
+
+`limit` aceita 1 a 200 (padrão 50); `cursor` continua a lista com os mesmos
+filtros. O envelope inclui `meta.next_cursor`, `meta.sources[]` com o crédito
+NASA/JPL CNEOS NeoWs e `meta.coverage: { from, to }`. A cobertura informa o
+intervalo disponível independentemente da janela pedida e do filtro de perigo;
+uma consulta fora dele retorna uma lista vazia.
+As coletas novas registram a janela solicitada inclusive quando a fonte retorna
+zero aproximações; uma falha não amplia a cobertura. Para dados anteriores à
+migration de cobertura, as datas dos eventos preservados servem como referência.
+Sem qualquer janela ou evento conhecido, ambos os limites são `null`.
+
+## Erros
+
 Erros usam `application/problem+json` com `type`, `title`, `status`, `code` e
-`detail`. Códigos: `invalid_input` (400), `invalid_cursor` (400), `not_found` (404)
+`detail`. Códigos: `invalid_input` (400), `invalid_cursor` (400), `invalid_api_key` (401), `not_found` (404)
 e `internal_error` (500). Trate o `code`, pois o texto não é um contrato estável.
