@@ -11,7 +11,47 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 
 export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
+export type Json = JsonValue;
+
+export type JsonArray = JsonValue[];
+
+export type JsonObject = {
+  [x: string]: JsonValue | undefined;
+};
+
+export type JsonPrimitive = boolean | number | string | null;
+
+export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
+
+export interface Exoplanet {
+  dec_deg: number | null;
+  discovery_facility: string | null;
+  discovery_method: string | null;
+  discovery_year: number | null;
+  distance_pc: number | null;
+  eccentricity: number | null;
+  equilibrium_temperature_k: number | null;
+  first_seen_at: Timestamp;
+  host_name: string | null;
+  id: Generated<Int8>;
+  insolation_earth_flux: number | null;
+  last_seen_at: Timestamp;
+  mass_earth_masses: number | null;
+  name: string;
+  orbital_period_days: number | null;
+  ra_deg: number | null;
+  radius_earth_radii: number | null;
+  raw: Json;
+  removed_at: Timestamp | null;
+  semi_major_axis_au: number | null;
+  star_effective_temperature_k: number | null;
+  star_mass_solar_masses: number | null;
+  star_radius_solar_radii: number | null;
+  system_planet_count: number | null;
+  system_star_count: number | null;
+}
 
 export interface IngestionRun {
   created_count: number | null;
@@ -26,5 +66,6 @@ export interface IngestionRun {
 }
 
 export interface DB {
+  exoplanet: Exoplanet;
   ingestion_run: IngestionRun;
 }

@@ -1,13 +1,6 @@
-// Coleta CLI (stub). Runs a coleta for one fonte against DATABASE_URL (direct connection).
+// Coleta CLI: `npm run collect -- <source>`. Runs one coleta against DATABASE_URL (direct connection,
+// never the pooled endpoint: the per-fonte advisory lock is session-level) and exits non-zero on failure.
 // Must never import from `src/api`; shares only `db`, `domain` and `sources`.
-import { SOURCES, isSource } from '../domain/source.js';
+import { main } from './main.js';
 
-const [sourceArg] = process.argv.slice(2);
-
-if (!sourceArg || !isSource(sourceArg)) {
-  console.error(`Usage: npm run collect -- <source>\nKnown sources: ${SOURCES.join(', ')}`);
-  process.exit(1);
-}
-
-console.error(`Coleta for "${sourceArg}" is not implemented yet.`);
-process.exit(1);
+process.exitCode = await main(process.argv.slice(2), { databaseUrl: process.env.DATABASE_URL });
