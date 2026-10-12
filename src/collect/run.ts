@@ -57,18 +57,22 @@ export async function runCollection<T>(
 
       try {
         const data = await collector.fetch();
-        const counts = await conn.transaction().execute((trx) => collector.store(trx, data, now()));
-        await conn
-          .updateTable('ingestion_run')
-          .set({
-            status: 'succeeded',
-            finished_at: now(),
-            seen_count: counts.seen,
-            created_count: counts.created,
-            revised_count: counts.revised,
-          })
-          .where('id', '=', run.id)
-          .execute();
+        const counts = await conn.transaction().execute(async (trx) => {
+          const stored = await collector.store(trx, data, now());
+          // Data and success metadata must commit together, so a failed run keeps the last good data.
+          await trx
+            .updateTable('ingestion_run')
+            .set({
+              status: 'succeeded',
+              finished_at: now(),
+              seen_count: stored.seen,
+              created_count: stored.created,
+              revised_count: stored.revised,
+            })
+            .where('id', '=', run.id)
+            .execute();
+          return stored;
+        });
         return { runId: run.id, ...counts };
       } catch (error) {
         await conn

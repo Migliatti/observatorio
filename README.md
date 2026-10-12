@@ -29,7 +29,7 @@ A API valida as variáveis de ambiente no boot e não sobe com configuração in
 | `db:up` / `db:down` | Sobe / derruba o Postgres do docker-compose |
 | `db:migrate` | Migrations pelo `Migrator` do Kysely (só para frente) e `db:codegen` em seguida |
 | `db:codegen` / `db:codegen:check` | Regera / confere os tipos em `src/db/generated` |
-| `collect` | CLI de coleta (ainda um esboço) |
+| `collect` | Coleta do Exoplanet Archive: `npm run collect -- exoplanet-archive` (conexão direta em `DATABASE_URL`) |
 
 ## Testes
 

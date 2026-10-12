@@ -1,5 +1,6 @@
 // Coleta of the Exoplanet Archive against the real Postgres, with the fonte served from recorded fixtures.
 import { readFileSync } from 'node:fs';
+import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Database } from '../db/database.js';
 import type { Fetch } from '../sources/http.js';
@@ -151,6 +152,31 @@ describe('coleta of the Exoplanet Archive', () => {
     expect(await runs()).toEqual([
       expect.objectContaining({ status: 'failed', error: 'Error: disk full', finished_at: DAY_1 }),
     ]);
+  });
+
+  it('keeps the last good data when recording the successful run fails', async () => {
+    expect((await collect(fixture('pscomppars.json'), DAY_1)).code).toBe(0);
+    const previous = await planets();
+
+    // NOT VALID preserves the existing successful run while rejecting new success writes.
+    await sql`alter table ingestion_run add constraint reject_success
+      check (status <> 'succeeded') not valid`.execute(db);
+    try {
+      const { code } = await collect(fixture('pscomppars-later.json'), DAY_2);
+
+      expect(code).toBe(1);
+      expect(await planets()).toEqual(previous);
+      expect((await runs()).at(-1)).toMatchObject({
+        status: 'failed',
+        finished_at: DAY_2,
+        seen_count: null,
+        created_count: null,
+        revised_count: null,
+        error: expect.stringContaining('reject_success'),
+      });
+    } finally {
+      await sql`alter table ingestion_run drop constraint reject_success`.execute(db);
+    }
   });
 
   it('refuses a second coleta of the same fonte while one is running', async () => {
