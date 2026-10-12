@@ -1,9 +1,11 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { sql } from 'kysely';
+import { CATALOGUE_RETENTION_MS, EXOPLANET_CATALOGUE_LOCK } from '../../db/exoplanet-catalogue.js';
+import { freshness } from '../../domain/freshness.js';
 import type { FastifyInstance } from 'fastify';
 import { Type, type Static } from 'typebox';
 import { problem, problemSchema } from '../problem.js';
-import { metaSchema, sourceMeta } from '../source-meta.js';
+import { EXOPLANET_ARCHIVE_ATTRIBUTION, metaSchema, sourceMeta } from '../source-meta.js';
 
 const nullableNumber = Type.Union([Type.Number(), Type.Null()]);
 const nullableString = Type.Union([Type.String(), Type.Null()]);
@@ -42,23 +44,35 @@ const ranges = [
   ['radius_earth_radii', 'radius_earth_radii_min', 'radius_earth_radii_max'],
   ['mass_earth_masses', 'mass_earth_masses_min', 'mass_earth_masses_max'],
 ] as const;
-interface Cursor { version: 1; binding: string; id: string; value: string | number | null; max_id: string }
+interface Cursor { version: 2; binding: string; catalogue_id: string; id: string; value: string | number | null; expires_at: number }
 
-function binding(query: ListQuery, dataAsOf: string | null): string {
+function binding(query: ListQuery): string {
   const { cursor: _cursor, limit: _limit, ...filters } = query;
-  return createHash('sha256').update(JSON.stringify(Object.entries({ ...filters, data_as_of: dataAsOf, sort: query.sort ?? 'name', order: query.order ?? 'asc', include_removed: query.include_removed ?? false }).toSorted(([a], [b]) => a.localeCompare(b)))).digest('hex');
+  return createHash('sha256').update(JSON.stringify(Object.entries({ ...filters, sort: query.sort ?? 'name', order: query.order ?? 'asc', include_removed: query.include_removed ?? false }).toSorted(([a], [b]) => a.localeCompare(b)))).digest('hex');
 }
-function encodeCursor(cursor: Cursor): string { return Buffer.from(JSON.stringify(cursor)).toString('base64url'); }
+function encodeCursor(cursor: Cursor, key: string): string {
+  const payload = Buffer.from(JSON.stringify(cursor)).toString('base64url');
+  return `${payload}.${createHmac('sha256', key).update(payload).digest('base64url')}`;
+}
+function validCursorSignature(encoded: string, key: string): boolean {
+  const [payload, signature] = encoded.split('.');
+  if (!payload || !signature) return false;
+  const expected = createHmac('sha256', key).update(payload).digest();
+  const received = Buffer.from(signature, 'base64url');
+  return received.length === expected.length && received.toString('base64url') === signature && timingSafeEqual(received, expected);
+}
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[1-9]\d{0,18}$/.test(id) && BigInt(id) <= 9223372036854775807n;
-function decodeCursor(encoded: string, expectedBinding: string, sort: Sort): Cursor | null {
+function decodeCursor(encoded: string, expectedBinding: string, sort: Sort, now: Date): Cursor | null {
   try {
-    if (!/^[A-Za-z0-9_-]+$/.test(encoded)) return null;
-    const decoded = Buffer.from(encoded, 'base64url');
-    if (decoded.toString('base64url') !== encoded) return null;
+    if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(encoded)) return null;
+    const payload = encoded.split('.')[0]!;
+    const decoded = Buffer.from(payload, 'base64url');
+    if (decoded.toString('base64url') !== payload) return null;
     const value: unknown = JSON.parse(decoded.toString('utf8'));
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const item = value as Record<string, unknown>;
-    if (Object.keys(item).toSorted().join(',') !== 'binding,id,max_id,value,version' || item.version !== 1 || item.binding !== expectedBinding || !validId(item.id) || !validId(item.max_id) || BigInt(item.id) > BigInt(item.max_id)) return null;
+    if (Object.keys(item).toSorted().join(',') !== 'binding,catalogue_id,expires_at,id,value,version' || item.version !== 2 || item.binding !== expectedBinding || !validId(item.id) || !validId(item.catalogue_id)) return null;
+    if (typeof item.expires_at !== 'number' || !Number.isSafeInteger(item.expires_at) || item.expires_at <= now.getTime() || item.expires_at > now.getTime() + CATALOGUE_RETENTION_MS) return null;
     if (sort === 'name' ? typeof item.value !== 'string' || item.value.length === 0 || item.value.length > 200 : item.value !== null && (typeof item.value !== 'number' || !Number.isFinite(item.value) || item.value < 0 || (sort === 'discovery_year' && !Number.isInteger(item.value)))) return null;
     return item as unknown as Cursor;
   } catch { return null; }
@@ -67,10 +81,14 @@ function decodeCursor(encoded: string, expectedBinding: string, sort: Sort): Cur
 export async function exoplanetRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: ListQuery }>('/v1/exoplanets', {
     schema: { tags: ['Exoplanets'], summary: 'List confirmed exoplanets', querystring: listQuery,
-      response: { 200: Type.Object({ data: Type.Array(exoplanetSchema), meta: Type.Object({ ...metaSchema.properties, next_cursor: nullableString }) }), 400: problemSchema },
+      response: { 200: Type.Object({ data: Type.Array(exoplanetSchema), meta: Type.Object({ ...metaSchema.properties, next_cursor: nullableString, updates_available: Type.Boolean(), snapshot_expires_at: nullableTimestamp }) }), 400: problemSchema },
     },
   }, async (request, reply) => {
-    return app.db.transaction().setIsolationLevel('repeatable read').execute(async (db) => {
+    const firstPage = request.query.cursor === undefined;
+    return app.db.transaction().setIsolationLevel(firstPage ? 'read committed' : 'repeatable read').execute(async (db) => {
+      // READ COMMITTED obtains a fresh catalogue after a publication that held the lock.
+      // A shared transaction lock keeps first-page selection and its deadline together.
+      if (firstPage) await sql`select pg_advisory_xact_lock_shared(hashtextextended(${EXOPLANET_CATALOGUE_LOCK}, 0))`.execute(db);
       const query = request.query;
       for (const [, min, max] of ranges) {
         if (query[min] !== undefined && query[max] !== undefined && query[min] > query[max]) return problem(reply, 400, 'invalid_input', `${min} must not exceed ${max}.`);
@@ -78,15 +96,25 @@ export async function exoplanetRoutes(app: FastifyInstance): Promise<void> {
       const sort = query.sort ?? 'name';
       const order = query.order ?? 'asc';
       const limit = query.limit ?? 50;
-      const source = await sourceMeta(db, 'exoplanet-archive', app.now());
-      const queryBinding = binding(query, source.data_as_of);
-      const cursor = query.cursor === undefined ? null : decodeCursor(query.cursor, queryBinding, sort);
-      if (query.cursor !== undefined && cursor === null) return problem(reply, 400, 'invalid_cursor', 'The cursor is invalid for this query or the fonte has completed a new coleta. Restart pagination.');
-      // An insertion during navigation cannot extend the catalogue beyond this first-page boundary.
-      const maxId = cursor?.max_id ?? (await db.selectFrom('exoplanet').select(({ fn }) => fn.max('id').as('max_id')).executeTakeFirst())?.max_id;
-      let select = db.selectFrom('exoplanet').select(fields);
+      const now = app.now();
+      const queryBinding = binding(query);
+      const cursor = query.cursor === undefined ? null : decodeCursor(query.cursor, queryBinding, sort, now);
+      if (query.cursor !== undefined && cursor === null) return problem(reply, 400, 'invalid_cursor', 'The cursor is invalid or expired. Restart pagination.');
+      const latest = await db.selectFrom('exoplanet_catalogue').selectAll().orderBy('id', 'desc').executeTakeFirst();
+      const catalogue = cursor
+        ? await db.selectFrom('exoplanet_catalogue').selectAll().where('id', '=', cursor.catalogue_id).executeTakeFirst()
+        : latest;
+      if (cursor && (!catalogue || !validCursorSignature(query.cursor!, catalogue.cursor_key) || (catalogue.expires_at && catalogue.expires_at.getTime() <= now.getTime()))) {
+        return problem(reply, 400, 'invalid_cursor', 'The catalogue version has expired. Restart pagination.');
+      }
+      if (!catalogue) return { data: [], meta: {
+        sources: [await sourceMeta(db, 'exoplanet-archive', now)], next_cursor: null,
+        updates_available: false, snapshot_expires_at: null,
+      } };
+      const source = { name: 'exoplanet-archive', ...freshness(catalogue.data_as_of, now), attribution: EXOPLANET_ARCHIVE_ATTRIBUTION };
+      const expiresAt = cursor?.expires_at ?? now.getTime() + CATALOGUE_RETENTION_MS;
+      let select = db.selectFrom('exoplanet_catalogue_item').select(fields).where('catalogue_id', '=', catalogue.id);
       if (!query.include_removed) select = select.where('removed_at', 'is', null);
-      if (maxId) select = select.where('id', '<=', maxId);
       if (query.name !== undefined) {
         const literal = query.name.replace(/[\\%_]/g, '\\$&');
         select = select.where('name', 'ilike', `%${literal}%`);
@@ -107,7 +135,8 @@ export async function exoplanetRoutes(app: FastifyInstance): Promise<void> {
       const data = rows.slice(0, limit);
       const last = data.at(-1);
       return { data, meta: { sources: [source],
-        next_cursor: rows.length > limit && last && maxId ? encodeCursor({ version: 1, binding: queryBinding, id: last.id, value: last[sort], max_id: maxId }) : null,
+        next_cursor: rows.length > limit && last ? encodeCursor({ version: 2, binding: queryBinding, catalogue_id: catalogue.id, id: last.id, value: last[sort], expires_at: expiresAt }, catalogue.cursor_key) : null,
+        updates_available: latest?.id !== catalogue.id, snapshot_expires_at: new Date(expiresAt).toISOString(),
       } };
     });
   });

@@ -1,6 +1,7 @@
 // Stores a coleta of the Exoplanet Archive: upserts every exoplaneta seen and marks the missing ones as removed.
 import { sql, type Transaction } from 'kysely';
 import type { DB } from '../db/generated/database.js';
+import { EXOPLANET_CATALOGUE_LOCK, publishExoplanetCatalogue } from '../db/exoplanet-catalogue.js';
 import { exoplanetContentHash, exoplanetParameters } from '../domain/exoplanet.js';
 import { EXOPLANET_FIELDS, fetchExoplanetArchive, type ArchiveExoplanet } from '../sources/exoplanet-archive.js';
 import type { HttpOptions } from '../sources/http.js';
@@ -10,7 +11,7 @@ import type { CollectionCounts, Collector } from './run.js';
 const BATCH_SIZE = 1_000;
 
 export function exoplanetArchiveCollector(http: HttpOptions = {}): Collector<ArchiveExoplanet[]> {
-  return { fetch: () => fetchExoplanetArchive(http), store: storeExoplanets };
+  return { fetch: () => fetchExoplanetArchive(http), store: storeExoplanets, publish: publishExoplanetCatalogue };
 }
 
 export async function storeExoplanets(
@@ -18,6 +19,9 @@ export async function storeExoplanets(
   planets: ArchiveExoplanet[],
   now: Date,
 ): Promise<CollectionCounts> {
+  // First-page readers finish before the replacement's retention clock starts.
+  // This lock covers only database work, never the fonte request.
+  await sql`select pg_advisory_xact_lock(hashtextextended(${EXOPLANET_CATALOGUE_LOCK}, 0))`.execute(trx);
   const existing = new Map(
     (await trx.selectFrom('exoplanet').select(['id', 'content_hash', ...EXOPLANET_FIELDS]).execute()).map((row) => [row.name, row]),
   );

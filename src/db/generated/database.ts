@@ -80,6 +80,43 @@ export interface Exoplanet {
   system_star_count: number | null;
 }
 
+export interface ExoplanetCatalogue {
+  created_at: Timestamp;
+  cursor_key: Generated<string>;
+  data_as_of: Timestamp | null;
+  expires_at: Timestamp | null;
+  id: Generated<Int8>;
+  ingestion_run_id: Int8 | null;
+}
+
+export interface ExoplanetCatalogueItem {
+  catalogue_id: Int8;
+  dec_deg: number | null;
+  discovery_facility: string | null;
+  discovery_method: string | null;
+  discovery_year: number | null;
+  distance_pc: number | null;
+  eccentricity: number | null;
+  equilibrium_temperature_k: number | null;
+  first_seen_at: Timestamp;
+  host_name: string | null;
+  id: Int8;
+  insolation_earth_flux: number | null;
+  last_seen_at: Timestamp;
+  mass_earth_masses: number | null;
+  name: string;
+  orbital_period_days: number | null;
+  ra_deg: number | null;
+  radius_earth_radii: number | null;
+  removed_at: Timestamp | null;
+  semi_major_axis_au: number | null;
+  star_effective_temperature_k: number | null;
+  star_mass_solar_masses: number | null;
+  star_radius_solar_radii: number | null;
+  system_planet_count: number | null;
+  system_star_count: number | null;
+}
+
 export interface ExoplanetRevision {
   content_hash: string;
   exoplanet_id: Int8;
@@ -104,6 +141,8 @@ export interface DB {
   asteroid: Asteroid;
   close_approach: CloseApproach;
   exoplanet: Exoplanet;
+  exoplanet_catalogue: ExoplanetCatalogue;
+  exoplanet_catalogue_item: ExoplanetCatalogueItem;
   exoplanet_revision: ExoplanetRevision;
   ingestion_run: IngestionRun;
 }

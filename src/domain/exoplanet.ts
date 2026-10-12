@@ -24,7 +24,7 @@ export interface ExoplanetParameters {
   system_planet_count: number | null;
 }
 
-const PARAMETER_FIELDS = [
+export const EXOPLANET_PARAMETER_FIELDS = [
   'name', 'host_name', 'discovery_method', 'discovery_year', 'discovery_facility',
   'orbital_period_days', 'semi_major_axis_au', 'eccentricity', 'radius_earth_radii',
   'mass_earth_masses', 'equilibrium_temperature_k', 'insolation_earth_flux', 'distance_pc',
@@ -34,7 +34,7 @@ const PARAMETER_FIELDS = [
 
 /** Selects the typed parameters in a fixed order, independently of the input object's key order. */
 export function exoplanetParameters(exoplanet: ExoplanetParameters): ExoplanetParameters {
-  return Object.fromEntries(PARAMETER_FIELDS.map((field) => [field, exoplanet[field]])) as unknown as ExoplanetParameters;
+  return Object.fromEntries(EXOPLANET_PARAMETER_FIELDS.map((field) => [field, exoplanet[field]])) as unknown as ExoplanetParameters;
 }
 
 /** SHA256 of canonical JSON: raw source data and collection timestamps never cause a revision. */

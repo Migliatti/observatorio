@@ -1,6 +1,6 @@
 # Exoplanetas (`/v1`)
 
-`GET /v1/exoplanets` retorna `{ data: [], meta: { sources: [], next_cursor } }`.
+`GET /v1/exoplanets` retorna `{ data: [], meta: { sources: [], next_cursor, updates_available, snapshot_expires_at } }`.
 Cada item contém apenas campos tipados em `snake_case`; valores ausentes são `null`.
 `id` é uma string decimal para preservar a precisão de `bigint`.
 `raw` e `content_hash` não são expostos.
@@ -20,19 +20,39 @@ Cada item contém apenas campos tipados em `snake_case`; valores ausentes são `
 
 Todas as ordenações usam `id` como desempate, na mesma direção.
 Para continuar, preserve os filtros e a ordenação; é permitido mudar o `limit`.
-O cursor guarda a posição sem depender de a linha anterior continuar visível e
-fixa o maior `id` da primeira página, para que inserções posteriores não estendam a lista.
-Quando uma nova coleta bem-sucedida termina, mesmo sem alterações de parâmetros,
-o cursor é invalidado com
-`400 invalid_cursor`: reinicie a navegação sem cursor. Assim, a API não mistura
-páginas de estados diferentes da fonte, evitando saltos e repetições decorrentes
-de parâmetros de ordenação revisados. A leitura do frescor e da página usa a
-mesma transação com isolamento `REPEATABLE READ`.
+A primeira página escolhe a versão atual do catálogo. O cursor mantém essa mesma
+versão nas páginas seguintes, incluindo valores, filtros, removidos e ordenação,
+mesmo quando outra coleta revisa, insere, remove ou faz um exoplaneta reaparecer.
+Não decodifique nem modifique o cursor.
+
+`meta.updates_available` sinaliza que uma nova coleta bem-sucedida publicou outro
+catálogo desde o início dessa navegação. O aplicativo pode oferecer “Há dados
+novos — atualizar”, sem descartar a lista em andamento. Ao escolher atualizar,
+faça uma nova consulta sem cursor, preservando filtros e ordenação. Uma coleta
+que falha não publica outro catálogo. O sinal é consultado a cada página; a API
+não envia notificações automaticamente.
+
+`meta.sources[].data_as_of` e `stale` descrevem a versão que está sendo lida,
+não a versão mais recente. Isso mantém o frescor coerente com os itens exibidos.
+A primeira página escolhe uma versão publicada completa, coordenada com a
+coleta por um lock compartilhado durante a leitura. Ao continuar, a versão, os
+dados e a disponibilidade de atualização são lidos na mesma transação
+`REPEATABLE READ`. Nenhum lock permanece aberto entre pedidos HTTP.
+
+A navegação vale por 48 horas desde a primeira página, sem estender o prazo a
+cada pedido. `meta.snapshot_expires_at` informa esse limite. Depois dele, a API
+responde `400 invalid_cursor`; reinicie sem cursor. Versões substituídas são
+mantidas no banco por 48 horas após a substituição e limpas na próxima coleta
+bem-sucedida. O catálogo atual permanece disponível mesmo se a fonte ficar
+sem responder por vários dias. As revisões permanentes dos exoplanetas não
+são apagadas. Antes da primeira coleta, uma lista vazia pode devolver
+`snapshot_expires_at: null`.
 
 `GET /v1/exoplanets/{name}` usa o nome do Archive codificado na URL, por exemplo
 `/v1/exoplanets/HD%202039%20b`. O envelope é `{ data: {}, meta: { sources: [] } }`.
 Planetas removidos respondem `404 not_found` por padrão; `?include_removed=true`
-os inclui com `removed_at` preenchido.
+os inclui com `removed_at` preenchido. O detalhe consulta sempre os dados atuais;
+a versão fixada pelo cursor se aplica à lista.
 
 `meta.sources[]` contém `name`, `data_as_of`, `stale` e `attribution`. O frescor
 é o instante da última coleta bem-sucedida. Uma falha posterior não o substitui.

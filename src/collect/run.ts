@@ -19,6 +19,8 @@ export interface Collector<T> {
   fetch: () => Promise<T>;
   /** Writes what was read. Runs inside the data transaction; any error rolls everything back. */
   store: (trx: Transaction<DB>, data: T, now: Date) => Promise<CollectionCounts>;
+  /** Publishes read versions after the success metadata, in the same data transaction. */
+  publish?: (trx: Transaction<DB>, runId: string, finishedAt: Date) => Promise<void>;
 }
 
 /** Another coleta of the same fonte holds the lock. */
@@ -59,18 +61,20 @@ export async function runCollection<T>(
         const data = await collector.fetch();
         const counts = await conn.transaction().execute(async (trx) => {
           const stored = await collector.store(trx, data, now());
+          const finishedAt = now();
           // Data and success metadata must commit together, so a failed run keeps the last good data.
           await trx
             .updateTable('ingestion_run')
             .set({
               status: 'succeeded',
-              finished_at: now(),
+              finished_at: finishedAt,
               seen_count: stored.seen,
               created_count: stored.created,
               revised_count: stored.revised,
             })
             .where('id', '=', run.id)
             .execute();
+          await collector.publish?.(trx, run.id, finishedAt);
           return stored;
         });
         return { runId: run.id, ...counts };

@@ -5,6 +5,7 @@ import type { Exoplanet } from '../db/generated/database.js';
 import type { Database } from '../db/database.js';
 import { createTestDatabase, resetDatabase } from '../test/database.js';
 import { buildApp } from './app.js';
+import { publishExoplanetCatalogue } from '../db/exoplanet-catalogue.js';
 
 const names = (response: { json(): { data: Array<{ name: string }> } }) => response.json().data.map((row) => row.name);
 
@@ -15,12 +16,18 @@ describe('exoplanetas por HTTP', () => {
   beforeAll(async () => { db = createTestDatabase(); app = await buildApp({ db, now: () => now }); await app.ready(); });
   beforeEach(async () => { await resetDatabase(db); });
   afterAll(async () => { await app.close(); await db.destroy(); });
+  const publishVersion = async (finishedAt = now) => db.transaction().execute(async (trx) => {
+    const run = await trx.insertInto('ingestion_run').values({ source: 'exoplanet-archive', status: 'succeeded', finished_at: finishedAt })
+      .returning('id').executeTakeFirstOrThrow();
+    await publishExoplanetCatalogue(trx, run.id, finishedAt);
+  });
   const seed = async (rows: Array<Partial<Insertable<Exoplanet>> & { name: string }>) => {
     await db.insertInto('exoplanet').values(rows.map((row) => ({ raw: {}, first_seen_at: now, last_seen_at: now, ...row }))).execute();
+    await publishVersion();
   };
   it('lists typed data with the last successful coleta and required Archive credit', async () => {
     await db.insertInto('exoplanet').values({ name: 'Kepler-1 b', raw: { secret: true }, first_seen_at: now, last_seen_at: now }).execute();
-    await db.insertInto('ingestion_run').values({ source: 'exoplanet-archive', status: 'succeeded', finished_at: new Date('2026-10-10T11:59:59Z') }).execute();
+    await publishVersion(new Date('2026-10-10T11:59:59Z'));
     const response = await app.inject('/v1/exoplanets');
     expect(response.statusCode).toBe(200);
     const body = response.json();
@@ -85,16 +92,18 @@ describe('exoplanetas por HTTP', () => {
     expect(names(second)).toEqual(['B b', 'C b']);
     expect(second.json().meta.next_cursor).toBeNull();
   });
-  it('requires restarting pagination when a successful coleta changes the catalogue', async () => {
+  it('continues the original catalogue when a successful coleta changes the catalogue', async () => {
     await seed([{ name: 'A b', radius_earth_radii: 1 }, { name: 'B b', radius_earth_radii: 2 }]);
     const first = await app.inject('/v1/exoplanets?sort=radius_earth_radii&limit=1');
     await db.transaction().execute(async (trx) => {
       await trx.updateTable('exoplanet').set({ radius_earth_radii: 5 }).where('name', '=', 'A b').execute();
-      await trx.insertInto('ingestion_run').values({ source: 'exoplanet-archive', status: 'succeeded', finished_at: now }).execute();
+      const run = await trx.insertInto('ingestion_run').values({ source: 'exoplanet-archive', status: 'succeeded', finished_at: now }).returning('id').executeTakeFirstOrThrow();
+      await publishExoplanetCatalogue(trx, run.id, now);
     });
     const response = await app.inject(`/v1/exoplanets?sort=radius_earth_radii&limit=1&cursor=${first.json().meta.next_cursor}`);
-    expect(response.statusCode).toBe(400);
-    expect(response.json().code).toBe('invalid_cursor');
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([expect.objectContaining({ name: 'B b', radius_earth_radii: 2 })]);
+    expect(response.json().meta.updates_available).toBe(true);
   });
   it('rejects malformed cursors and cursors used with different filters or sorting', async () => {
     await seed([{ name: 'A b' }, { name: 'B b' }]);
