@@ -30,6 +30,18 @@ A API valida as variáveis de ambiente no boot e não sobe com configuração in
 | `db:migrate` | Migrations pelo `Migrator` do Kysely (só para frente) e `db:codegen` em seguida |
 | `db:codegen` / `db:codegen:check` | Regera / confere os tipos em `src/db/generated` |
 | `collect` | Coleta: `npm run collect -- exoplanet-archive` ou `npm run collect -- neows` (conexão direta em `DATABASE_URL`) |
+| `keys` | Gestão de chaves: `create <consumidor>`, `list` ou `revoke <id>` |
+
+## Consumindo a API
+
+Depois de migrar o banco, crie uma chave com `npm run keys -- create kepler-lab`.
+O CLI exibe a chave somente na criação; guarde-a para enviar
+`Authorization: Bearer obs_…` nas rotas de dados. `npm run keys -- list` mostra
+somente os metadados; `npm run keys -- revoke <id>` revoga uma chave.
+A revogação passa a valer em até 60 segundos nas instâncias em execução.
+
+`/health`, `/v1/status`, `/v1/openapi.json` e `/docs` são públicos.
+O [contrato da API](docs/api.md) descreve filtros, histórico, paginação e erros.
 
 ## Testes
 

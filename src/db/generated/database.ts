@@ -25,6 +25,16 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface ApiKey {
+  consumer: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<Int8>;
+  key_hash: string;
+  last_used_at: Timestamp | null;
+  prefix: string;
+  revoked_at: Timestamp | null;
+}
+
 export interface Asteroid {
   absolute_magnitude_h: number | null;
   estimated_diameter_max_km: number | null;
@@ -126,6 +136,8 @@ export interface ExoplanetRevision {
 }
 
 export interface IngestionRun {
+  coverage_from: Timestamp | null;
+  coverage_to: Timestamp | null;
   created_count: number | null;
   error: string | null;
   finished_at: Timestamp | null;
@@ -138,6 +150,7 @@ export interface IngestionRun {
 }
 
 export interface DB {
+  api_key: ApiKey;
   asteroid: Asteroid;
   close_approach: CloseApproach;
   exoplanet: Exoplanet;

@@ -4,6 +4,10 @@ import type { Database } from '../db/database.js';
 import { exoplanetRoutes } from './routes/exoplanets.js';
 import { installProblemHandler } from './problem.js';
 import { healthRoutes } from './routes/health.js';
+import { publicRoutes } from './routes/public.js';
+import { revisionRoutes } from './routes/revisions.js';
+import { closeApproachRoutes } from './routes/close-approaches.js';
+import { installApiKeyAuth } from './auth.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -28,16 +32,21 @@ export async function buildApp({ db, logger = false, now = () => new Date() }: A
   app.decorate('db', db);
   app.decorate('now', now);
   installProblemHandler(app);
+  installApiKeyAuth(app);
 
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
       info: { title: 'Observatório API', version: '1.0.0' },
+      components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } },
     },
   });
 
   await app.register(healthRoutes);
+  await app.register(publicRoutes);
   await app.register(exoplanetRoutes);
+  await app.register(revisionRoutes);
+  await app.register(closeApproachRoutes);
 
   return app;
 }

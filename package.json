@@ -20,7 +20,8 @@
     "db:down": "docker compose down",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts && npm run db:codegen",
     "db:codegen": "kysely-codegen --dialect postgres --out-file src/db/generated/database.ts --exclude-pattern \"kysely_migration*\"",
-    "db:codegen:check": "npm run db:codegen -- --verify"
+    "db:codegen:check": "npm run db:codegen -- --verify",
+    "keys": "tsx --env-file-if-exists=.env src/keys/cli.ts"
   },
   "dependencies": {
     "@fastify/swagger": "^9.9.1",
