@@ -25,6 +25,12 @@ try {
 }
 const app = await buildApp({
   db,
+  rateLimits: {
+    ip: { capacity: config.RATE_LIMIT_IP_CAPACITY, windowSeconds: config.RATE_LIMIT_IP_WINDOW_SECONDS },
+    apiKey: { capacity: config.RATE_LIMIT_KEY_CAPACITY, refillPerSecond: config.RATE_LIMIT_KEY_REFILL_PER_SECOND },
+  },
+  corsOrigins: config.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
+  trustedProxies: config.TRUSTED_PROXIES.split(',').map((proxy) => proxy.trim()).filter(Boolean),
   logger: {
     level: config.LOG_LEVEL,
     redact: ['req.headers.authorization'],
