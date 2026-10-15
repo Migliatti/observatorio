@@ -1,5 +1,5 @@
 import swagger from '@fastify/swagger';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Database } from '../db/database.js';
 import { exoplanetRoutes } from './routes/exoplanets.js';
 import { installProblemHandler } from './problem.js';
@@ -8,6 +8,7 @@ import { publicRoutes } from './routes/public.js';
 import { revisionRoutes } from './routes/revisions.js';
 import { closeApproachRoutes } from './routes/close-approaches.js';
 import { installApiKeyAuth } from './auth.js';
+import { installRequestLogging } from './request-logging.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -27,11 +28,12 @@ export interface AppDependencies {
  * The caller owns the database lifecycle.
  */
 export async function buildApp({ db, logger = false, now = () => new Date() }: AppDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger });
+  const app = Fastify({ logger, logController: new LogController({ disableRequestLogging: true }) });
 
   app.decorate('db', db);
   app.decorate('now', now);
   installProblemHandler(app);
+  installRequestLogging(app);
   installApiKeyAuth(app);
 
   await app.register(swagger, {

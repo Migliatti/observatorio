@@ -25,7 +25,7 @@ A API valida as variáveis de ambiente no boot e não sobe com configuração in
 | --- | --- |
 | `dev` / `start` | API em desenvolvimento (tsx) / compilada (`dist/`) |
 | `build` | Compila para `dist/` |
-| `lint` / `typecheck` / `test` | Oxlint, `tsc --noEmit`, Vitest |
+| `lint` / `typecheck` / `test` / `test:fast` | Oxlint, `tsc --noEmit`, suite Vitest completa / testes sem Postgres |
 | `db:up` / `db:down` | Sobe / derruba o Postgres do docker-compose |
 | `db:migrate` | Migrations pelo `Migrator` do Kysely (só para frente) e `db:codegen` em seguida |
 | `db:codegen` / `db:codegen:check` | Regera / confere os tipos em `src/db/generated` |
