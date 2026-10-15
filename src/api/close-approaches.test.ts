@@ -10,7 +10,18 @@ describe('aproximações por HTTP', () => {
   let app: FastifyInstance;
   const now = new Date('2026-10-12T23:59:59Z');
   let apiKey: string;
-  beforeAll(async () => { db = createTestDatabase(); app = await buildApp({ db, now: () => now }); await app.ready(); });
+  beforeAll(async () => {
+    db = createTestDatabase();
+    app = await buildApp({
+      db,
+      now: () => now,
+      rateLimits: {
+        ip: { capacity: 1000, windowSeconds: 60 },
+        apiKey: { capacity: 1000, refillPerSecond: 1 },
+      },
+    });
+    await app.ready();
+  });
   beforeEach(async () => { await resetDatabase(db); apiKey = (await createApiKey(db, 'aproximações test', now)).key; });
   const request = (url: string) => app.inject({ url, headers: { authorization: `Bearer ${apiKey}` } });
   afterAll(async () => { await app?.close(); await db?.destroy(); });
