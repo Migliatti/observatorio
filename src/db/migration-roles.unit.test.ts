@@ -22,6 +22,20 @@ describe('least-privilege role migration', () => {
 });
 
 describe.skipIf(!existsSync(followupPath))('namespace migration for existing databases', () => {
+  it('requires ADMIN OPTION on pre-existing namespaced roles before changing any role', () => {
+    const followup = readFileSync(followupPath, 'utf8').toLowerCase();
+    const preflightEnd = followup.indexOf('$migration_preflight$;', followup.indexOf('do $migration_preflight$'));
+
+    expect(followup).toContain('pg_auth_members');
+    expect(followup).toContain('admin_option');
+    expect(followup).toContain('admin option');
+    expect(preflightEnd).toBeGreaterThan(0);
+    expect(preflightEnd).toBeLessThan(followup.indexOf('do $roles$'));
+    for (const role of ['observatorio_migrator', 'observatorio_collector', 'observatorio_api', 'observatorio_key_admin']) {
+      expect(followup).toContain(`'${role}'`);
+    }
+  });
+
   it('adopts existing objects without modifying generic cluster roles', () => {
     const followup = readFileSync(followupPath, 'utf8').toLowerCase();
     for (const role of ['migrator', 'collector', 'api', 'key_admin']) {
