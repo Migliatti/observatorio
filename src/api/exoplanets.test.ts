@@ -16,7 +16,18 @@ describe('exoplanetas por HTTP', () => {
   let authorization: string;
   const request = (url: string) => app.inject({ url, headers: { authorization } });
   const now = new Date('2026-10-12T12:00:00Z');
-  beforeAll(async () => { db = createTestDatabase(); app = await buildApp({ db, now: () => now }); await app.ready(); });
+  beforeAll(async () => {
+    db = createTestDatabase();
+    app = await buildApp({
+      db,
+      now: () => now,
+      rateLimits: {
+        ip: { capacity: 1000, windowSeconds: 60 },
+        apiKey: { capacity: 1000, refillPerSecond: 1 },
+      },
+    });
+    await app.ready();
+  });
   beforeEach(async () => { await resetDatabase(db); authorization = `Bearer ${(await createApiKey(db, 'test consumer', now)).key}`; });
   afterAll(async () => { await app.close(); await db.destroy(); });
   const publishVersion = async (finishedAt = now) => db.transaction().execute(async (trx) => {
