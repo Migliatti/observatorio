@@ -37,6 +37,7 @@ describe('request logs', () => {
     app.get('/v1/__test/:id', async (_request, reply) => reply.code(304).send());
     app.get('/v1/__test-error/:id', async () => {
       throw Object.assign(new Error(`private handler failure: ${errorSecret}\n    at Object.leak (${errorSecret}.ts:999:1)`), {
+        name: `Error\n    at Object.leak (${errorSecret}.name.ts:777:1)`,
         authorization: `Bearer ${errorSecret}`,
         apiKey: errorSecret,
       });
@@ -85,8 +86,8 @@ describe('request logs', () => {
       statusCode: 500,
       problemCode: 'internal_error',
       errorType: 'Error',
-      stackFrames: expect.stringMatching(/request-logs\.test\.ts:\d+/),
     });
+    expect(entry).not.toHaveProperty('stackFrames');
     expect(lines.join('')).not.toContain(secretKey);
     expect(lines.join('')).not.toContain('Bearer');
     expect(lines.join('')).not.toContain(errorSecret);

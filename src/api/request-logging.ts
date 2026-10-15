@@ -12,7 +12,6 @@ export function installRequestLogging(app: FastifyInstance): void {
       keyId: request.apiKey?.id.slice(-6) ?? null,
       problemCode: request.problemCode,
       errorType: request.errorType,
-      stackFrames: request.stackFrames,
     };
 
     if (reply.statusCode >= 500) request.log.error(fields, 'request completed');
