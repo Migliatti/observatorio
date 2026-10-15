@@ -20,7 +20,7 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate.ts && npm run db:codegen",
-    "db:codegen": "kysely-codegen --dialect postgres --out-file src/db/generated/database.ts --exclude-pattern \"kysely_migration*\"",
+    "db:codegen": "kysely-codegen --dialect postgres --url \"env(MIGRATOR_DATABASE_URL)\" --out-file src/db/generated/database.ts --exclude-pattern \"kysely_migration*\"",
     "db:codegen:check": "npm run db:codegen -- --verify",
     "keys": "tsx --env-file-if-exists=.env src/keys/cli.ts"
   },

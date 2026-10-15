@@ -3,59 +3,100 @@ import { sql, type Kysely } from 'kysely';
 /** Service roles are provisioned once per Postgres cluster; object grants are per database. */
 export async function up(db: Kysely<unknown>): Promise<void> {
   await sql.raw(`
+    do $migration_preflight$
+    declare can_create_roles boolean;
+    connection_is_superuser boolean;
+    existing_role text;
+    begin
+      select rolcreaterole or rolsuper, rolsuper into can_create_roles, connection_is_superuser
+      from pg_roles where rolname = current_user;
+      if not coalesce(can_create_roles, false) then
+        raise exception 'Migration 0009 requires a direct owner connection with CREATEROLE; use the bootstrap URL.';
+      end if;
+
+      if not coalesce(connection_is_superuser, false) then
+        foreach existing_role in array array[
+          'observatorio_migrator',
+          'observatorio_collector',
+          'observatorio_api',
+          'observatorio_key_admin'
+        ] loop
+          if exists (
+            select from pg_roles target
+            where target.rolname = existing_role
+              and target.rolsuper
+          ) then
+            raise exception 'Migration 0009 cannot alter pre-existing SUPERUSER role "%" as a non-superuser; run with a superuser connection or have an administrator correct the role first.', existing_role;
+          end if;
+
+          if exists (select from pg_roles where rolname = existing_role)
+            and not exists (
+              select from pg_auth_members membership
+              join pg_roles target on target.oid = membership.roleid
+              where target.rolname = existing_role
+                and membership.member = current_user::regrole
+                and membership.admin_option
+            ) then
+            raise exception 'Migration 0009 cannot administer pre-existing role "%": current role "%" needs ADMIN OPTION; use a bootstrap/superuser connection or have an administrator grant ADMIN OPTION first.', existing_role, current_user;
+          end if;
+        end loop;
+      end if;
+    end
+    $migration_preflight$;
+
     do $roles$
     begin
-      if not exists (select from pg_roles where rolname = 'migrator') then
-        create role migrator login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+      if not exists (select from pg_roles where rolname = 'observatorio_migrator') then
+        create role observatorio_migrator login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        alter role observatorio_migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       end if;
-      if not exists (select from pg_roles where rolname = 'collector') then
-        create role collector login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+      if not exists (select from pg_roles where rolname = 'observatorio_collector') then
+        create role observatorio_collector login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        alter role observatorio_collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       end if;
-      if not exists (select from pg_roles where rolname = 'api') then
-        create role api login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+      if not exists (select from pg_roles where rolname = 'observatorio_api') then
+        create role observatorio_api login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        alter role observatorio_api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       end if;
-      if not exists (select from pg_roles where rolname = 'key_admin') then
-        create role key_admin login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+      if not exists (select from pg_roles where rolname = 'observatorio_key_admin') then
+        create role observatorio_key_admin login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        alter role observatorio_key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       end if;
     end
     $roles$;
 
     do $migration_membership$
     begin
-      if current_user <> 'migrator' then
-        execute format('grant migrator to %I', current_user);
+      if current_user <> 'observatorio_migrator' then
+        execute format('grant observatorio_migrator to %I with set true, inherit true', current_user);
       end if;
     end
     $migration_membership$;
 
     revoke create on schema public from public;
-    grant usage, create on schema public to migrator;
-    grant usage on schema public to api, collector;
-    grant usage on schema public to key_admin;
+    grant usage, create on schema public to observatorio_migrator;
+    grant usage on schema public to observatorio_api, observatorio_collector;
+    grant usage on schema public to observatorio_key_admin;
 
     grant select, insert, update, delete on table
       public.kysely_migration,
       public.kysely_migration_lock
-    to migrator;
-    alter table public.ingestion_run owner to migrator;
-    alter table public.exoplanet owner to migrator;
-    alter table public.exoplanet_revision owner to migrator;
-    alter table public.exoplanet_catalogue owner to migrator;
-    alter table public.exoplanet_catalogue_item owner to migrator;
-    alter table public.asteroid owner to migrator;
-    alter table public.close_approach owner to migrator;
-    alter table public.api_key owner to migrator;
+    to observatorio_migrator;
+    alter table public.ingestion_run owner to observatorio_migrator;
+    alter table public.exoplanet owner to observatorio_migrator;
+    alter table public.exoplanet_revision owner to observatorio_migrator;
+    alter table public.exoplanet_catalogue owner to observatorio_migrator;
+    alter table public.exoplanet_catalogue_item owner to observatorio_migrator;
+    alter table public.asteroid owner to observatorio_migrator;
+    alter table public.close_approach owner to observatorio_migrator;
+    alter table public.api_key owner to observatorio_migrator;
 
-    revoke all on all tables in schema public from api, collector, key_admin, public;
-    revoke all on all sequences in schema public from api, collector, key_admin, public;
+    revoke all on all tables in schema public from observatorio_api, observatorio_collector, observatorio_key_admin, public;
+    revoke all on all sequences in schema public from observatorio_api, observatorio_collector, observatorio_key_admin, public;
 
     grant select on table
       public.ingestion_run,
@@ -66,14 +107,14 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       public.asteroid,
       public.close_approach,
       public.api_key
-    to api;
-    grant update (last_used_at) on table public.api_key to api;
+    to observatorio_api;
+    grant update (last_used_at) on table public.api_key to observatorio_api;
 
-    grant insert on table public.api_key to key_admin;
+    grant insert on table public.api_key to observatorio_key_admin;
     grant select (id, prefix, consumer, created_at, last_used_at, revoked_at)
-      on table public.api_key to key_admin;
-    grant update (revoked_at) on table public.api_key to key_admin;
-    grant usage on sequence public.api_key_id_seq to key_admin;
+      on table public.api_key to observatorio_key_admin;
+    grant update (revoked_at) on table public.api_key to observatorio_key_admin;
+    grant usage on sequence public.api_key_id_seq to observatorio_key_admin;
 
     grant select, insert, update, delete on table
       public.ingestion_run,
@@ -83,7 +124,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       public.exoplanet_catalogue_item,
       public.asteroid,
       public.close_approach
-    to collector;
+    to observatorio_collector;
     grant usage, select on sequence
       public.ingestion_run_id_seq,
       public.exoplanet_id_seq,
@@ -91,9 +132,9 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       public.exoplanet_catalogue_id_seq,
       public.asteroid_id_seq,
       public.close_approach_id_seq
-    to collector;
+    to observatorio_collector;
 
-    alter default privileges for role migrator in schema public
-      grant select on tables to api;
+    alter default privileges for role observatorio_migrator in schema public
+      grant select on tables to observatorio_api;
   `).execute(db);
 }

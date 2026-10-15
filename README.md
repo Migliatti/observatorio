@@ -28,7 +28,7 @@ A API valida as variáveis de ambiente no boot e não sobe com configuração in
 | `lint` / `typecheck` / `test` / `test:fast` | Oxlint, `tsc --noEmit`, suite Vitest completa / testes sem Postgres |
 | `db:up` / `db:down` | Sobe / derruba o Postgres do docker-compose |
 | `db:migrate` | Migrations pelo `Migrator` do Kysely, usando `MIGRATOR_DATABASE_URL` direta (só para frente), e `db:codegen` em seguida |
-| `db:codegen` / `db:codegen:check` | Regera / confere os tipos em `src/db/generated` |
+| `db:codegen` / `db:codegen:check` | Regera / confere os tipos em `src/db/generated` usando `MIGRATOR_DATABASE_URL` |
 | `collect` | Coleta: `npm run collect -- exoplanet-archive` ou `npm run collect -- neows` (conexão direta em `COLLECTOR_DATABASE_URL`) |
 | `keys` | Gestão de chaves: `create <consumidor>`, `list` ou `revoke <id>` (conexão direta em `KEYS_DATABASE_URL`) |
 
