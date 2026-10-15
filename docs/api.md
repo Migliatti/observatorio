@@ -13,6 +13,24 @@ formato `problem+json`. A validação tem cache por 60 segundos em cada instânc
 uma chave recém-revogada pode continuar aceita até esse prazo. O instante
 `last_used_at` é atualizado no máximo uma vez a cada cinco minutos por chave.
 
+Cada chave tem um token bucket com capacidade padrão de 30 pedidos e reposição
+de um token por segundo. Antes da autenticação, cada IP tem limite de 30 pedidos
+por janela móvel de 60 segundos. `RateLimit-Limit`, `RateLimit-Remaining` e
+`RateLimit-Reset` descrevem o limite aplicado; `RateLimit-Reset` e `Retry-After`
+são segundos. Um pedido que responde `304` também consome um token da chave.
+Capacidade, reposição, janela e origens CORS são configuráveis no ambiente.
+Os contadores ficam em memória: reiniciar o processo ou iniciar uma instância
+fria repõe os limites; instâncias distintas não compartilham contadores, então
+o limite efetivo pode multiplicar-se pelo número de instâncias ativas.
+
+As rotas de dados aceitam origens CORS exatas de `CORS_ORIGINS`, separadas por
+vírgulas. O padrão inclui `https://kepler-lab-gamma.vercel.app` e os endereços
+locais de desenvolvimento `http://localhost:5173` e `http://localhost:3000`.
+Em produção, configure a origem publicada do consumidor; em desenvolvimento,
+mantenha também as origens locais. `/health`, `/v1/status`, `/v1/openapi.json`
+e `/docs` aceitam qualquer origem. A API expõe `ETag`, `Retry-After` e os
+headers `RateLimit-*` ao navegador.
+
 `/health`, `/v1/status`, `/v1/openapi.json` e `/docs` continuam acessíveis sem chave.
 O status expõe o resultado e fim da última coleta de cada fonte em `data.sources`
 e o frescor da última coleta bem-sucedida em `meta.sources`. O OpenAPI descreve

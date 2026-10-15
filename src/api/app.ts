@@ -8,6 +8,8 @@ import { publicRoutes } from './routes/public.js';
 import { revisionRoutes } from './routes/revisions.js';
 import { closeApproachRoutes } from './routes/close-approaches.js';
 import { installApiKeyAuth } from './auth.js';
+import { installCors, installCorsPreflight } from './cors.js';
+import { installApiKeyRateLimit, installIpRateLimit, type RateLimitPolicies } from './rate-limit.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -20,19 +22,31 @@ export interface AppDependencies {
   db: Database;
   logger?: FastifyServerOptions['logger'];
   now?: () => Date;
+  rateLimits?: RateLimitPolicies;
+  corsOrigins?: readonly string[];
 }
 
 /**
  * Builds the Fastify app without listening, so tests can drive it with `app.inject()`.
  * The caller owns the database lifecycle.
  */
-export async function buildApp({ db, logger = false, now = () => new Date() }: AppDependencies): Promise<FastifyInstance> {
+export async function buildApp({
+  db,
+  logger = false,
+  now = () => new Date(),
+  rateLimits = { ip: { capacity: 30, windowSeconds: 60 }, apiKey: { capacity: 30, refillPerSecond: 1 } },
+  corsOrigins = ['https://kepler-lab-gamma.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+}: AppDependencies): Promise<FastifyInstance> {
   const app = Fastify({ logger });
 
   app.decorate('db', db);
   app.decorate('now', now);
   installProblemHandler(app);
+  installCors(app, corsOrigins);
+  installIpRateLimit(app, rateLimits.ip);
+  installCorsPreflight(app);
   installApiKeyAuth(app);
+  installApiKeyRateLimit(app, rateLimits.apiKey);
 
   await app.register(swagger, {
     openapi: {

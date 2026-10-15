@@ -5,9 +5,9 @@ export const problemSchema = Type.Object({
   type: Type.String(), title: Type.String(), status: Type.Integer(), code: Type.String(), detail: Type.String(),
 });
 export function problem(reply: FastifyReply, status: number, code: string, detail: string) {
-  return reply.code(status).type('application/problem+json').send({
-    type: 'about:blank', title: status === 404 ? 'Not Found' : status === 401 ? 'Unauthorized' : status === 400 ? 'Bad Request' : 'Internal Server Error', status, code, detail,
-  });
+  const title = status === 404 ? 'Not Found' : status === 401 ? 'Unauthorized' : status === 400 ? 'Bad Request'
+    : status === 429 ? 'Too Many Requests' : 'Internal Server Error';
+  return reply.code(status).type('application/problem+json').send({ type: 'about:blank', title, status, code, detail });
 }
 export function installProblemHandler(app: FastifyInstance): void {
   app.setErrorHandler<FastifyError>((error, request, reply) => {

@@ -12,6 +12,15 @@ export const ConfigSchema = Type.Object({
   PORT: Type.Integer({ minimum: 1, maximum: 65535, default: 3000 }),
   HOST: Type.String({ minLength: 1, default: '0.0.0.0' }),
   LOG_LEVEL: Type.Enum([...LOG_LEVELS], { default: 'info' }),
+  RATE_LIMIT_KEY_CAPACITY: Type.Integer({ minimum: 1, default: 30 }),
+  RATE_LIMIT_KEY_REFILL_PER_SECOND: Type.Number({ exclusiveMinimum: 0, default: 1 }),
+  RATE_LIMIT_IP_CAPACITY: Type.Integer({ minimum: 1, default: 30 }),
+  RATE_LIMIT_IP_WINDOW_SECONDS: Type.Integer({ minimum: 1, default: 60 }),
+  CORS_ORIGINS: Type.String({
+    minLength: 1,
+    default: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173,http://localhost:3000',
+    description: 'Comma-separated exact origins allowed to call data routes from a browser',
+  }),
 });
 
 export type Config = Static<typeof ConfigSchema>;
