@@ -33,7 +33,7 @@ export class CollectionLockedError extends Error {
 
 /**
  * Runs a coleta of `source`. Uses one dedicated connection for the whole run, because a session-level
- * pg_advisory_lock belongs to the connection that took it (so DATABASE_URL must be the direct endpoint,
+ * pg_advisory_lock belongs to the connection that took it (so COLLECTOR_DATABASE_URL must be the direct endpoint,
  * never a transaction pooler). The ingestion_run row is written outside the data transaction, so a
  * failed run is recorded even though its data is rolled back.
  */

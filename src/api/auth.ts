@@ -6,7 +6,7 @@ const CACHE_MS = 60_000;
 const LAST_USED_MS = 5 * 60_000;
 const PUBLIC_ROUTES = new Set(['/v1/status', '/v1/openapi.json']);
 const KEY_PATTERN = /^Bearer (obs_[A-Za-z0-9_-]{43})$/;
-const isDataRoute = (url: string) => url.startsWith('/v1/') && !PUBLIC_ROUTES.has(url);
+export const isDataRoute = (url: string) => url.startsWith('/v1/') && !PUBLIC_ROUTES.has(url);
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -23,7 +23,7 @@ export function installApiKeyAuth(app: FastifyInstance): void {
     route.schema = {
       ...route.schema,
       security: [{ bearerAuth: [] }],
-      response: { ...(route.schema?.response as Record<string, unknown> | undefined), 401: problemSchema },
+      response: { ...(route.schema?.response as Record<string, unknown> | undefined), 401: problemSchema, 429: problemSchema },
     };
   });
   app.addHook('onRequest', async (request, reply) => {

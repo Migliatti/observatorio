@@ -30,7 +30,7 @@ export async function main(args: readonly string[], deps: CliDependencies): Prom
   }
   const url = deps.databaseUrl;
   if (!url || !/^postgres(ql)?:\/\/.+/.test(url)) {
-    logError('DATABASE_URL is missing or is not a postgres:// connection string. See .env.example.');
+    logError('COLLECTOR_DATABASE_URL is missing or is not a postgres:// connection string. See .env.example.');
     return 1;
   }
 

@@ -2,16 +2,29 @@ import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
-const SECRET_KEYS = new Set(['DATABASE_URL']);
+const SECRET_KEYS = new Set(['API_DATABASE_URL']);
 
 export const ConfigSchema = Type.Object({
-  DATABASE_URL: Type.String({
+  API_DATABASE_URL: Type.String({
     pattern: '^postgres(ql)?://.+',
-    description: 'Postgres connection string (postgres://user:pass@host:port/db)',
+    description: 'Postgres connection string for the API; use the pooled endpoint in production.',
   }),
   PORT: Type.Integer({ minimum: 1, maximum: 65535, default: 3000 }),
   HOST: Type.String({ minLength: 1, default: '0.0.0.0' }),
   LOG_LEVEL: Type.Enum([...LOG_LEVELS], { default: 'info' }),
+  RATE_LIMIT_KEY_CAPACITY: Type.Integer({ minimum: 1, default: 30 }),
+  RATE_LIMIT_KEY_REFILL_PER_SECOND: Type.Number({ exclusiveMinimum: 0, default: 1 }),
+  RATE_LIMIT_IP_CAPACITY: Type.Integer({ minimum: 1, default: 30 }),
+  RATE_LIMIT_IP_WINDOW_SECONDS: Type.Integer({ minimum: 1, default: 60 }),
+  CORS_ORIGINS: Type.String({
+    minLength: 1,
+    default: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173,http://localhost:3000',
+    description: 'Comma-separated exact origins allowed to call data routes from a browser',
+  }),
+  TRUSTED_PROXIES: Type.String({
+    default: '',
+    description: 'Comma-separated trusted proxy IPs or CIDRs; empty disables forwarded-header trust',
+  }),
 });
 
 export type Config = Static<typeof ConfigSchema>;
