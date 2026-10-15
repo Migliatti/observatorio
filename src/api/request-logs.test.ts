@@ -13,6 +13,7 @@ describe('request logs', () => {
     },
   });
   const secretKey = `obs_${'a'.repeat(43)}`;
+  const errorSecret = 'sentinel-secret-credential';
   const database = {
     selectFrom() {
       const query = {
@@ -34,7 +35,12 @@ describe('request logs', () => {
       logger: { level: 'info', stream },
     });
     app.get('/v1/__test/:id', async (_request, reply) => reply.code(304).send());
-    app.get('/v1/__test-error/:id', async () => { throw new Error('private handler failure'); });
+    app.get('/v1/__test-error/:id', async () => {
+      throw Object.assign(new Error(`private handler failure: ${errorSecret}\n    at Object.leak (${errorSecret}.ts:999:1)`), {
+        authorization: `Bearer ${errorSecret}`,
+        apiKey: errorSecret,
+      });
+    });
     await app.ready();
     lines.length = 0;
   });
@@ -74,8 +80,15 @@ describe('request logs', () => {
     expect(response.headers['content-type']).toContain('application/problem+json');
     expect(response.json()).toMatchObject({ code: 'internal_error' });
     expect(lines).toHaveLength(1);
-    expect(JSON.parse(lines[0]!)).toMatchObject({ statusCode: 500, problemCode: 'internal_error' });
+    const entry = JSON.parse(lines[0]!);
+    expect(entry).toMatchObject({
+      statusCode: 500,
+      problemCode: 'internal_error',
+      errorType: 'Error',
+      stackFrames: expect.stringMatching(/request-logs\.test\.ts:\d+/),
+    });
     expect(lines.join('')).not.toContain(secretKey);
     expect(lines.join('')).not.toContain('Bearer');
+    expect(lines.join('')).not.toContain(errorSecret);
   });
 });
