@@ -1,10 +1,10 @@
-// CLI: applies pending migrations to DATABASE_URL (direct connection, never the pooled endpoint).
+// CLI: applies pending migrations to MIGRATOR_DATABASE_URL (direct connection, never the pooled endpoint).
 import { createDatabase } from './database.js';
 import { migrateToLatest } from './migrator.js';
 
-const url = process.env.DATABASE_URL;
+const url = process.env.MIGRATOR_DATABASE_URL;
 if (!url || !/^postgres(ql)?:\/\/.+/.test(url)) {
-  console.error('DATABASE_URL is missing or is not a postgres:// connection string. See .env.example.');
+  console.error('MIGRATOR_DATABASE_URL is missing or is not a postgres:// connection string. See .env.example.');
   process.exit(1);
 }
 
