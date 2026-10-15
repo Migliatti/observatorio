@@ -1,12 +1,17 @@
 import { Client } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { testDatabaseUrl } from './database.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createTestDatabase, resetDatabase, testDatabaseUrl } from './database.js';
 
 describe('Postgres service roles', () => {
   const client = new Client({ connectionString: testDatabaseUrl() });
+  const cleanupDb = createTestDatabase();
 
   beforeAll(async () => client.connect());
-  afterAll(async () => client.end());
+  beforeEach(async () => resetDatabase(cleanupDb));
+  afterAll(async () => {
+    await client.end();
+    await cleanupDb.destroy();
+  });
 
   it('lets api read and update only last_used_at, while denying data writes and key deletion', async () => {
     await client.query('SET ROLE api');
@@ -42,20 +47,23 @@ describe('Postgres service roles', () => {
   });
 
   it('lets key_admin create, read, and revoke keys without deleting them', async () => {
-    const keyHash = 'e'.repeat(64);
-    await client.query('DELETE FROM api_key WHERE key_hash = $1', [keyHash]);
     await client.query('SET ROLE key_admin');
     try {
+      await expect(client.query('SELECT key_hash FROM api_key')).rejects.toMatchObject({ code: '42501' });
+      await expect(client.query('SELECT last_value FROM api_key_id_seq')).rejects.toMatchObject({ code: '42501' });
+      const created = await client.query<{ id: string }>(
+        `INSERT INTO api_key (key_hash, prefix, consumer)
+         VALUES (repeat('e', 64), 'obs_test', 'role test')
+         RETURNING id, prefix, consumer, created_at, revoked_at, last_used_at`,
+      );
+      const id = created.rows[0]!.id;
       await expect(client.query(
-        'INSERT INTO api_key (key_hash, prefix, consumer) VALUES ($1, $2, $3) RETURNING id',
-        [keyHash, 'obs_test', 'role test'],
+        'SELECT id, prefix, consumer, created_at, revoked_at, last_used_at FROM api_key ORDER BY id',
       )).resolves.toBeDefined();
-      await expect(client.query('SELECT id FROM api_key WHERE key_hash = $1', [keyHash])).resolves.toBeDefined();
-      await expect(client.query('UPDATE api_key SET revoked_at = now() WHERE key_hash = $1', [keyHash])).resolves.toBeDefined();
-      await expect(client.query('DELETE FROM api_key WHERE key_hash = $1', [keyHash])).rejects.toMatchObject({ code: '42501' });
+      await expect(client.query('UPDATE api_key SET revoked_at = now() WHERE id = $1', [id])).resolves.toBeDefined();
+      await expect(client.query('DELETE FROM api_key WHERE id = $1', [id])).rejects.toMatchObject({ code: '42501' });
     } finally {
       await client.query('RESET ROLE');
-      await client.query('DELETE FROM api_key WHERE key_hash = $1', [keyHash]);
     }
   });
 });

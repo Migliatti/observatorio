@@ -69,9 +69,11 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     to api;
     grant update (last_used_at) on table public.api_key to api;
 
-    grant select, insert on table public.api_key to key_admin;
+    grant insert on table public.api_key to key_admin;
+    grant select (id, prefix, consumer, created_at, last_used_at, revoked_at)
+      on table public.api_key to key_admin;
     grant update (revoked_at) on table public.api_key to key_admin;
-    grant usage, select on sequence public.api_key_id_seq to key_admin;
+    grant usage on sequence public.api_key_id_seq to key_admin;
 
     grant select, insert, update, delete on table
       public.ingestion_run,
