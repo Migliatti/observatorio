@@ -2,12 +2,12 @@ import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
-const SECRET_KEYS = new Set(['DATABASE_URL']);
+const SECRET_KEYS = new Set(['API_DATABASE_URL']);
 
 export const ConfigSchema = Type.Object({
-  DATABASE_URL: Type.String({
+  API_DATABASE_URL: Type.String({
     pattern: '^postgres(ql)?://.+',
-    description: 'Postgres connection string (postgres://user:pass@host:port/db)',
+    description: 'Postgres connection string for the API; use the pooled endpoint in production.',
   }),
   PORT: Type.Integer({ minimum: 1, maximum: 65535, default: 3000 }),
   HOST: Type.String({ minLength: 1, default: '0.0.0.0' }),

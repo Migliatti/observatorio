@@ -1,5 +1,7 @@
 // API entrypoint: validates configuration before anything else and refuses to boot when it is invalid.
 import { createDatabase } from '../db/database.js';
+import { connectWithRetry } from '../db/connect.js';
+import { sql } from 'kysely';
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig, type Config } from './config.js';
 
@@ -14,7 +16,13 @@ try {
   throw error;
 }
 
-const db = createDatabase(config.DATABASE_URL);
+const db = createDatabase(config.API_DATABASE_URL, { maxConnections: 5 });
+try {
+  await connectWithRetry(() => sql`select 1`.execute(db));
+} catch (error) {
+  await db.destroy();
+  throw error;
+}
 const app = await buildApp({
   db,
   logger: {

@@ -27,10 +27,16 @@ A API valida as variáveis de ambiente no boot e não sobe com configuração in
 | `build` | Compila para `dist/` |
 | `lint` / `typecheck` / `test` | Oxlint, `tsc --noEmit`, Vitest |
 | `db:up` / `db:down` | Sobe / derruba o Postgres do docker-compose |
-| `db:migrate` | Migrations pelo `Migrator` do Kysely (só para frente) e `db:codegen` em seguida |
+| `db:migrate` | Migrations pelo `Migrator` do Kysely, usando `MIGRATOR_DATABASE_URL` direta (só para frente), e `db:codegen` em seguida |
 | `db:codegen` / `db:codegen:check` | Regera / confere os tipos em `src/db/generated` |
-| `collect` | Coleta: `npm run collect -- exoplanet-archive` ou `npm run collect -- neows` (conexão direta em `DATABASE_URL`) |
-| `keys` | Gestão de chaves: `create <consumidor>`, `list` ou `revoke <id>` |
+| `collect` | Coleta: `npm run collect -- exoplanet-archive` ou `npm run collect -- neows` (conexão direta em `COLLECTOR_DATABASE_URL`) |
+| `keys` | Gestão de chaves: `create <consumidor>`, `list` ou `revoke <id>` (conexão direta em `KEYS_DATABASE_URL`) |
+
+Os processos usam URLs separadas: `API_DATABASE_URL` (endpoint pooled em produção),
+`COLLECTOR_DATABASE_URL` e `MIGRATOR_DATABASE_URL` (endpoints diretos). O pool da
+API aceita até 5 conexões, expira tentativas após 10 segundos e tenta conectar até
+5 vezes com jitter. As permissões e o primeiro bootstrap estão em
+[docs/database-roles.md](docs/database-roles.md).
 
 ## Consumindo a API
 

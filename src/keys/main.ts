@@ -19,7 +19,7 @@ export async function main(args: readonly string[], deps: KeyCliDependencies): P
     return 1;
   }
   if (!deps.databaseUrl || !/^postgres(ql)?:\/\/.+/.test(deps.databaseUrl)) {
-    logError('DATABASE_URL is missing or is not a postgres:// connection string. See .env.example.');
+    logError('KEYS_DATABASE_URL is missing or is not a postgres:// connection string. See .env.example.');
     return 1;
   }
   const db = createDatabase(deps.databaseUrl, { maxConnections: 1 });

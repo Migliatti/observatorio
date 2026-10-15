@@ -4,13 +4,15 @@ import { createDatabase } from '../db/database.js';
 import { validateTestDatabaseUrl } from './database.js';
 
 const poolInstances = vi.hoisted(() => [] as EventEmitter[]);
+const poolOptions = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 
 vi.mock('pg', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   const { EventEmitter } = await import('node:events');
   class FakePool extends EventEmitter {
-    constructor() {
+    constructor(options: Record<string, unknown>) {
       super();
+      poolOptions.push(options);
       poolInstances.push(this);
     }
     end(): Promise<void> {
@@ -45,6 +47,13 @@ describe('validateTestDatabaseUrl', () => {
 });
 
 describe('createDatabase', () => {
+  it('uses the API pool limit and connection timeout', async () => {
+    const db = createDatabase('postgres://u:p@localhost:5432/app_test', { maxConnections: 5 });
+
+    expect(poolOptions.at(-1)).toMatchObject({ max: 5, connectionTimeoutMillis: 10_000 });
+    await db.destroy();
+  });
+
   it('registers a pool error listener so idle-client errors do not crash the process', async () => {
     const onPoolError = vi.fn<(error: Error) => void>();
     const db = createDatabase('postgres://u:p@localhost:5432/app_test', { onPoolError });
