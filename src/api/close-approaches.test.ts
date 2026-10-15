@@ -58,6 +58,28 @@ describe('aproximações por HTTP', () => {
     expect(response.json().meta.coverage).toEqual({ from: '2026-10-01', to: '2026-10-20' });
   });
 
+  it('validates cached data with the last successful coleta', async () => {
+    await db.insertInto('ingestion_run').values({ source: 'neows', status: 'succeeded', finished_at: '2026-10-10T23:59:58Z' }).execute();
+    const first = await request('/v1/close-approaches');
+    const firstEtag = first.headers.etag;
+    expect(first.statusCode).toBe(200);
+    expect(first.headers['cache-control']).toBe('private, no-cache');
+    expect(firstEtag).toEqual(expect.any(String));
+
+    const unchanged = await app.inject({ url: '/v1/close-approaches', headers: { authorization: `Bearer ${apiKey}`, 'if-none-match': firstEtag! } });
+    expect(unchanged.statusCode).toBe(304);
+    expect(unchanged.body).toBe('');
+    expect(unchanged.headers.etag).toBe(firstEtag);
+
+    await db.insertInto('ingestion_run').values({ source: 'neows', status: 'succeeded', finished_at: '2026-10-11T23:59:58Z' }).execute();
+    const refreshed = await request('/v1/close-approaches');
+    expect(refreshed.headers.etag).not.toBe(firstEtag);
+
+    await db.insertInto('ingestion_run').values({ source: 'neows', status: 'failed', finished_at: '2026-10-12T22:59:58Z' }).execute();
+    const afterFailure = await request('/v1/close-approaches');
+    expect(afterFailure.headers.etag).toBe(refreshed.headers.etag);
+  });
+
   it('paginates dates and equal dates with stable ids, and rejects malformed or mismatched cursors', async () => {
     await seed('2026-10-13', 'later'); await seed('2026-10-12', 'first'); await seed('2026-10-12', 'second');
     const seen: string[] = [];

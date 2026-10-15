@@ -10,6 +10,7 @@ import { closeApproachRoutes } from './routes/close-approaches.js';
 import { installApiKeyAuth } from './auth.js';
 import { installCors, installCorsPreflight } from './cors.js';
 import { installApiKeyRateLimit, installIpRateLimit, type RateLimitPolicies } from './rate-limit.js';
+import { installSourceCache } from './http-cache.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -49,6 +50,7 @@ export async function buildApp({
   installCorsPreflight(app);
   installApiKeyAuth(app);
   installApiKeyRateLimit(app, rateLimits.apiKey);
+  installSourceCache(app);
 
   await app.register(swagger, {
     openapi: {
