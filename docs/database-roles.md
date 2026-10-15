@@ -27,6 +27,24 @@ migration, defina senhas para as roles de serviço com o comando interativo `\pa
 no `psql` e configure as URLs de API, coleta, migrations e gestão de chaves com
 seus respectivos nomes de role `observatorio_*`. A URL pooled deve ser usada somente pela API.
 
+## Atualização de bancos com a 0009 antiga
+
+Para um banco que já registrou a versão anterior da migration `0009`, a migration `0010` cria
+as roles `observatorio_*`, transfere a propriedade das tabelas e sequências do aplicativo e
+reaplica os grants mínimos. Execute essa atualização uma vez com `MIGRATOR_DATABASE_URL`
+apontando para a mesma conexão direta owner usada no bootstrap, com permissão `CREATEROLE`.
+A migration falha antes de alterar roles se a conexão efetiva não tiver `CREATEROLE` (ou for
+superuser). A role `migrator` legada da 0009 é `NOCREATEROLE`, então não pode provisionar as novas
+roles. Depois que `npm run db:migrate`
+terminar, configure `MIGRATOR_DATABASE_URL`, `API_DATABASE_URL`, `COLLECTOR_DATABASE_URL` e
+`KEYS_DATABASE_URL` com as respectivas roles `observatorio_*`; API continua usando endpoint pooled.
+
+A migration `0010` não cria, altera ou remove as definições das roles genéricas legadas, nem
+revoga grants atribuídos a elas. A propriedade das tabelas deste aplicativo que estava com a role
+`migrator` é transferida para `observatorio_migrator`; as demais roles legadas e seus grants
+permanecem como estão. Só remova roles ou grants legados depois de confirmar que nenhum outro
+aplicativo compartilha essas roles.
+
 O `KEYS_DATABASE_URL` usa a role operacional `observatorio_key_admin` para preservar os comandos
 de criar, listar e revogar chaves sem ampliar os privilégios da API ou do coletor.
 Ela não executa migrations nem possui acesso às tabelas de dados.
@@ -40,5 +58,5 @@ grants de escrita permanecem explícitos.
 
 O código e as verificações locais não determinam se a criação SQL dessas roles e a
 transferência de propriedade são permitidas no projeto/plano Neon Free usado em
-produção. Essa capacidade precisa ser confirmada no deploy antes de aplicar a
-migration. Não houve conexão nem tentativa de aplicar a migration em Neon.
+produção. Essa capacidade precisa ser confirmada no deploy antes de aplicar as
+migrations. Não houve conexão nem tentativa de aplicar migration em Neon.

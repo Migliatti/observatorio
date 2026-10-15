@@ -13,6 +13,36 @@ describe('Postgres service roles', () => {
     await cleanupDb.destroy();
   });
 
+  it('assigns application and migration table ownership to observatorio_migrator', async () => {
+    const { rows } = await client.query<{ tablename: string; tableowner: string }>(`
+      select tablename, tableowner
+      from pg_tables
+      where schemaname = 'public'
+        and tablename in (
+          'kysely_migration', 'kysely_migration_lock', 'ingestion_run', 'exoplanet',
+          'exoplanet_revision', 'exoplanet_catalogue', 'exoplanet_catalogue_item',
+          'asteroid', 'close_approach', 'api_key'
+        )
+    `);
+
+    expect(rows).toHaveLength(10);
+    expect(rows.every((row) => row.tableowner === 'observatorio_migrator')).toBe(true);
+
+    const sequences = await client.query<{ relname: string; owner: string }>(`
+      select relname, pg_get_userbyid(relowner) as owner
+      from pg_class
+      where relkind = 'S'
+        and relname in (
+          'ingestion_run_id_seq', 'exoplanet_id_seq', 'exoplanet_revision_id_seq',
+          'exoplanet_catalogue_id_seq', 'asteroid_id_seq', 'close_approach_id_seq',
+          'api_key_id_seq'
+        )
+    `);
+
+    expect(sequences.rows).toHaveLength(7);
+    expect(sequences.rows.every((sequence) => sequence.owner === 'observatorio_migrator')).toBe(true);
+  });
+
   it('lets api read and update only last_used_at, while denying data writes and key deletion', async () => {
     await client.query('SET ROLE observatorio_api');
     try {
