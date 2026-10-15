@@ -27,6 +27,23 @@ describe('public API discovery', () => {
     expect(response.json().data.sources).toContainEqual(expect.objectContaining({ name: 'neows', last_run_status: 'failed' }));
   });
 
+  it('reports a fonte as stale while retaining its last successful instant', async () => {
+    await db.insertInto('ingestion_run').values([
+      { source: 'neows', status: 'succeeded', finished_at: new Date('2026-10-10T11:59:59Z') },
+      { source: 'neows', status: 'failed', finished_at: new Date('2026-10-12T11:00:00Z') },
+    ]).execute();
+
+    const response = await app.inject('/v1/status');
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.meta.sources).toContainEqual(expect.objectContaining({
+      name: 'neows', data_as_of: '2026-10-10T11:59:59.000Z', stale: true,
+    }));
+    expect(body.data.sources).toContainEqual(expect.objectContaining({
+      name: 'neows', last_run_status: 'failed', last_run_finished_at: '2026-10-12T11:00:00.000Z',
+    }));
+  });
+
   it('publishes OpenAPI and documentation without a key', async () => {
     const response = await app.inject('/v1/openapi.json');
     expect(response.statusCode).toBe(200);

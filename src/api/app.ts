@@ -8,6 +8,7 @@ import { publicRoutes } from './routes/public.js';
 import { revisionRoutes } from './routes/revisions.js';
 import { closeApproachRoutes } from './routes/close-approaches.js';
 import { installApiKeyAuth } from './auth.js';
+import { installSourceCache } from './http-cache.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -33,6 +34,7 @@ export async function buildApp({ db, logger = false, now = () => new Date() }: A
   app.decorate('now', now);
   installProblemHandler(app);
   installApiKeyAuth(app);
+  installSourceCache(app);
 
   await app.register(swagger, {
     openapi: {
