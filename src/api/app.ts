@@ -1,5 +1,5 @@
 import swagger from '@fastify/swagger';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Database } from '../db/database.js';
 import { exoplanetRoutes } from './routes/exoplanets.js';
 import { installProblemHandler } from './problem.js';
@@ -8,6 +8,7 @@ import { publicRoutes } from './routes/public.js';
 import { revisionRoutes } from './routes/revisions.js';
 import { closeApproachRoutes } from './routes/close-approaches.js';
 import { installApiKeyAuth } from './auth.js';
+import { installRequestLogging } from './request-logging.js';
 import { installCors, installCorsPreflight } from './cors.js';
 import { installApiKeyRateLimit, installIpRateLimit, type RateLimitPolicies } from './rate-limit.js';
 import { installSourceCache } from './http-cache.js';
@@ -40,11 +41,16 @@ export async function buildApp({
   corsOrigins = ['https://kepler-lab-gamma.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
   trustedProxies = [],
 }: AppDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger, trustProxy: trustedProxies.length > 0 ? [...trustedProxies] : false });
+  const app = Fastify({
+    logger,
+    logController: new LogController({ disableRequestLogging: true }),
+    trustProxy: trustedProxies.length > 0 ? [...trustedProxies] : false,
+  });
 
   app.decorate('db', db);
   app.decorate('now', now);
   installProblemHandler(app);
+  installRequestLogging(app);
   installCors(app, corsOrigins);
   installIpRateLimit(app, rateLimits.ip);
   installCorsPreflight(app);
