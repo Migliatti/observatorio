@@ -25,12 +25,16 @@ describe.skipIf(!existsSync(followupPath))('namespace migration for existing dat
   it('requires ADMIN OPTION on pre-existing namespaced roles before changing any role', () => {
     const followup = readFileSync(followupPath, 'utf8').toLowerCase();
     const preflightEnd = followup.indexOf('$migration_preflight$;', followup.indexOf('do $migration_preflight$'));
+    const roleChangesStart = followup.indexOf('do $roles$');
 
     expect(followup).toContain('pg_auth_members');
     expect(followup).toContain('admin_option');
     expect(followup).toContain('admin option');
+    expect(followup).toContain('target.rolsuper');
+    expect(followup).toContain('superuser role');
     expect(preflightEnd).toBeGreaterThan(0);
-    expect(preflightEnd).toBeLessThan(followup.indexOf('do $roles$'));
+    expect(followup.indexOf('target.rolsuper')).toBeLessThan(preflightEnd);
+    expect(preflightEnd).toBeLessThan(roleChangesStart);
     for (const role of ['observatorio_migrator', 'observatorio_collector', 'observatorio_api', 'observatorio_key_admin']) {
       expect(followup).toContain(`'${role}'`);
     }

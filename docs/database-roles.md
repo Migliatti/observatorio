@@ -38,8 +38,10 @@ superuser). Se qualquer role `observatorio_*` já existir, o usuário também pr
 sobre cada role existente; o preflight valida essa condição antes de executar DDL. Em PostgreSQL 16,
 `CREATEROLE` sozinho não permite administrar roles preexistentes sem essa opção. Use o usuário
 bootstrap que criou as roles, um superuser, ou peça a um administrador para conceder as opções antes
-da atualização. A role `migrator` legada da 0009 é `NOCREATEROLE`, então não pode provisionar as novas
-roles. Depois que `npm run db:migrate`
+da atualização. O preflight também interrompe a migration se alguma role alvo preexistente tiver
+`SUPERUSER`; nesse caso, somente uma conexão superuser pode administrá-la com segurança. A role
+`migrator` legada da 0009 é `NOCREATEROLE`, então não pode provisionar as novas roles. Depois que
+`npm run db:migrate`
 terminar, configure `MIGRATOR_DATABASE_URL`, `API_DATABASE_URL`, `COLLECTOR_DATABASE_URL` e
 `KEYS_DATABASE_URL` com as respectivas roles `observatorio_*`; API continua usando endpoint pooled.
 

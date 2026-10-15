@@ -20,6 +20,14 @@ export async function up(db: Kysely<unknown>): Promise<void> {
           'observatorio_api',
           'observatorio_key_admin'
         ] loop
+          if exists (
+            select from pg_roles target
+            where target.rolname = existing_role
+              and target.rolsuper
+          ) then
+            raise exception 'Migration 0010 cannot alter pre-existing SUPERUSER role "%" as a non-superuser; run with a superuser connection or have an administrator correct the role first.', existing_role;
+          end if;
+
           if exists (select from pg_roles where rolname = existing_role)
             and not exists (
               select from pg_auth_members membership
