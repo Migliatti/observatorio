@@ -35,7 +35,7 @@ function matchesIfNoneMatch(header: string | string[] | undefined, etag: string)
   });
 }
 
-/** Adds validators to successful data responses, using only the successful source version in meta. */
+/** Adds validators from the full serialized representation of successful data responses. */
 export function installSourceCache(app: FastifyInstance): void {
   app.addHook('onSend', async (request, reply, payload) => {
     const pathname = request.url.split('?')[0]!;
@@ -51,7 +51,7 @@ export function installSourceCache(app: FastifyInstance): void {
     const sources = sourceVersions(body);
     if (!sources) return payload;
 
-    const etag = `"${createHash('sha256').update(JSON.stringify({ url: request.url, sources })).digest('base64url')}"`;
+    const etag = `"${createHash('sha256').update(request.url).update('\0').update(payload).digest('base64url')}"`;
     reply.header('Cache-Control', 'private, no-cache');
     reply.header('ETag', etag);
     if (matchesIfNoneMatch(request.headers['if-none-match'], etag)) {

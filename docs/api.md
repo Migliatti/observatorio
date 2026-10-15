@@ -19,8 +19,9 @@ e o frescor da última coleta bem-sucedida em `meta.sources`. O OpenAPI descreve
 os schemas e a autenticação Bearer das rotas; `/docs` contém o guia público.
 
 As rotas de dados enviam `Cache-Control: private, no-cache` e um `ETag` calculado
-pela URL e pela versão de coleta bem-sucedida em `meta.sources`. Reenvie o valor
-em `If-None-Match`; se a versão não mudou, a API responde `304` sem corpo. Uma
+pela URL e pela representação serializada, que inclui a versão de coleta
+bem-sucedida em `meta.sources`. Reenvie o valor
+em `If-None-Match`; se a representação não mudou, a API responde `304` sem corpo. Uma
 coleta que falha mantém o validador da última versão bem-sucedida.
 
 `GET /v1/exoplanets` retorna `{ data: [], meta: { sources: [], next_cursor, updates_available, snapshot_expires_at } }`.

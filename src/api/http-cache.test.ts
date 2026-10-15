@@ -5,17 +5,16 @@ import { installSourceCache } from './http-cache.js';
 describe('conditional HTTP cache for data routes', () => {
   let app: FastifyInstance;
   let dataAsOf: string;
-  let lastRunStatus: string;
+  let snapshotExpiresAt: string;
 
   beforeEach(async () => {
     dataAsOf = '2026-10-10T00:00:00.000Z';
-    lastRunStatus = 'succeeded';
+    snapshotExpiresAt = '2026-10-12T00:00:00.000Z';
     app = Fastify();
     installSourceCache(app);
     app.get('/v1/exoplanets', async () => ({
       data: [{ name: 'Kepler-1 b' }],
-      meta: { sources: [{ name: 'exoplanet-archive', data_as_of: dataAsOf, stale: false }] },
-      last_run_status: lastRunStatus,
+      meta: { sources: [{ name: 'exoplanet-archive', data_as_of: dataAsOf, stale: false }], snapshot_expires_at: snapshotExpiresAt },
     }));
     app.get('/v1/status', async () => ({ data: { sources: [] }, meta: { sources: [] } }));
     await app.ready();
@@ -35,11 +34,14 @@ describe('conditional HTTP cache for data routes', () => {
     expect(unchanged.body).toBe('');
     expect(unchanged.headers.etag).toBe(firstEtag);
 
+    snapshotExpiresAt = '2026-10-13T00:00:00.000Z';
+    const changedRepresentation = await app.inject('/v1/exoplanets');
+    expect(changedRepresentation.headers.etag).not.toBe(firstEtag);
+
     dataAsOf = '2026-10-11T00:00:00.000Z';
     const refreshed = await app.inject('/v1/exoplanets');
-    expect(refreshed.headers.etag).not.toBe(firstEtag);
+    expect(refreshed.headers.etag).not.toBe(changedRepresentation.headers.etag);
 
-    lastRunStatus = 'failed';
     const afterFailure = await app.inject('/v1/exoplanets');
     expect(afterFailure.headers.etag).toBe(refreshed.headers.etag);
   });
