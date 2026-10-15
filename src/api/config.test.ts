@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig } from './config.js';
 
-const VALID_URL = 'postgres://api:secret@localhost:5432/observatorio';
+const VALID_URL = 'postgres://observatorio_api:secret@localhost:5432/observatorio';
 
 describe('loadConfig', () => {
   it('applies defaults and converts numbers', () => {

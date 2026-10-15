@@ -14,7 +14,7 @@ describe('Postgres service roles', () => {
   });
 
   it('lets api read and update only last_used_at, while denying data writes and key deletion', async () => {
-    await client.query('SET ROLE api');
+    await client.query('SET ROLE observatorio_api');
     try {
       await expect(client.query('SELECT id, key_hash FROM api_key')).resolves.toBeDefined();
       await expect(client.query('UPDATE api_key SET last_used_at = now() WHERE false')).resolves.toBeDefined();
@@ -29,7 +29,7 @@ describe('Postgres service roles', () => {
   });
 
   it('lets collector write collection data but denies schema changes and api-key writes', async () => {
-    await client.query('SET ROLE collector');
+    await client.query('SET ROLE observatorio_collector');
     try {
       const inserted = await client.query<{ id: string }>(
         "INSERT INTO ingestion_run (source) VALUES ('neows') RETURNING id",
@@ -47,7 +47,7 @@ describe('Postgres service roles', () => {
   });
 
   it('lets key_admin create, read, and revoke keys without deleting them', async () => {
-    await client.query('SET ROLE key_admin');
+    await client.query('SET ROLE observatorio_key_admin');
     try {
       await expect(client.query('SELECT key_hash FROM api_key')).rejects.toMatchObject({ code: '42501' });
       await expect(client.query('SELECT last_value FROM api_key_id_seq')).rejects.toMatchObject({ code: '42501' });
