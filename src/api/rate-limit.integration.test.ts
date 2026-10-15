@@ -77,6 +77,17 @@ describe('rate-limit and CORS hooks', () => {
     expect(limited.headers['access-control-expose-headers']).toBe(exposedHeaders);
   });
 
+  it('reports the stricter IP policy when its remaining proportion is lower than the key policy', async () => {
+    app = await createApp({ ipCapacity: 2, keyCapacity: 100 });
+    const headers = { authorization: `Bearer ${API_KEY}` };
+
+    expect((await app.inject({ url: '/v1/data', headers })).statusCode).toBe(200);
+    const second = await app.inject({ url: '/v1/data', headers });
+    expect(second.statusCode).toBe(200);
+    expect(second.headers['ratelimit-limit']).toBe('2');
+    expect(second.headers['ratelimit-remaining']).toBe('0');
+  });
+
   it('applies the IP limit before authentication', async () => {
     app = await createApp({ ipCapacity: 1 });
 

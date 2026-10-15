@@ -3,7 +3,7 @@ import { loadConfig } from './config.js';
 
 describe('rate-limit and CORS configuration', () => {
   it('defaults to the documented policies and converts environment overrides', () => {
-    const defaults = loadConfig({ DATABASE_URL: 'postgres://user:pass@localhost/observatorio' });
+    const defaults = loadConfig({ API_DATABASE_URL: 'postgres://user:pass@localhost/observatorio' });
     expect(defaults).toMatchObject({
       RATE_LIMIT_KEY_CAPACITY: 30,
       RATE_LIMIT_KEY_REFILL_PER_SECOND: 1,
@@ -14,7 +14,7 @@ describe('rate-limit and CORS configuration', () => {
     });
 
     const configured = loadConfig({
-      DATABASE_URL: 'postgres://user:pass@localhost/observatorio',
+      API_DATABASE_URL: 'postgres://user:pass@localhost/observatorio',
       RATE_LIMIT_KEY_CAPACITY: '12',
       RATE_LIMIT_KEY_REFILL_PER_SECOND: '2.5',
       RATE_LIMIT_IP_CAPACITY: '8',

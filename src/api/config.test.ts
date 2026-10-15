@@ -24,7 +24,7 @@ describe('loadConfig', () => {
 
   it('converts configurable rate limits and keeps CORS origins as a comma-separated list', () => {
     expect(loadConfig({
-      DATABASE_URL: VALID_URL,
+      API_DATABASE_URL: VALID_URL,
       RATE_LIMIT_KEY_CAPACITY: '12',
       RATE_LIMIT_KEY_REFILL_PER_SECOND: '2.5',
       RATE_LIMIT_IP_CAPACITY: '9',

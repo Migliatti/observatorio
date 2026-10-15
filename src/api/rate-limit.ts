@@ -4,6 +4,18 @@ import { problem } from './problem.js';
 
 const MAX_BUCKETS = 10_000;
 
+interface RateLimitHeaders {
+  limit: number;
+  remaining: number;
+  resetAfterSeconds: number;
+}
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    rateLimitHeaders?: RateLimitHeaders;
+  }
+}
+
 export interface TokenBucket {
   tokens: number;
   updatedAt: number;
@@ -79,24 +91,11 @@ function setBucket(buckets: Map<string, TokenBucket>, key: string, bucket: Token
   buckets.set(key, bucket);
 }
 
-function limit(
-  app: FastifyInstance,
-  reply: FastifyReply,
-  buckets: Map<string, TokenBucket>,
-  key: string,
-  policy: RatePolicy,
-): boolean {
-  const result = consumeToken(buckets.get(key), app.now().getTime(), policy.capacity, policy.refillPerSecond);
-  setBucket(buckets, key, result.bucket);
+function setRateLimitHeaders(reply: FastifyReply, headers: RateLimitHeaders): void {
   reply
-    .header('RateLimit-Limit', policy.capacity)
-    .header('RateLimit-Remaining', result.remaining)
-    .header('RateLimit-Reset', result.resetAfterSeconds);
-  if (result.allowed) return true;
-
-  reply.header('Retry-After', Math.max(1, result.retryAfterSeconds));
-  problem(reply, 429, 'rate_limited', 'The request rate limit has been reached.');
-  return false;
+    .header('RateLimit-Limit', headers.limit)
+    .header('RateLimit-Remaining', headers.remaining)
+    .header('RateLimit-Reset', headers.resetAfterSeconds);
 }
 
 /** Counts data requests from each IP before API-key authentication. */
@@ -109,10 +108,9 @@ export function installIpRateLimit(app: FastifyInstance, policy: RequestWindowPo
     const result = consumeRequestWindow(previous, app.now().getTime(), policy.capacity, policy.windowSeconds);
     if (!requestsByIp.has(request.ip) && requestsByIp.size >= MAX_BUCKETS) requestsByIp.delete(requestsByIp.keys().next().value!);
     requestsByIp.set(request.ip, result.requests);
-    reply
-      .header('RateLimit-Limit', policy.capacity)
-      .header('RateLimit-Remaining', result.remaining)
-      .header('RateLimit-Reset', result.resetAfterSeconds);
+    const headers = { limit: policy.capacity, remaining: result.remaining, resetAfterSeconds: result.resetAfterSeconds };
+    request.rateLimitHeaders = headers;
+    setRateLimitHeaders(reply, headers);
     if (!result.allowed) {
       reply.header('Retry-After', result.retryAfterSeconds);
       return problem(reply, 429, 'rate_limited', 'The request rate limit has been reached.');
@@ -126,6 +124,20 @@ export function installApiKeyRateLimit(app: FastifyInstance, policy: RatePolicy)
   app.addHook('onRequest', async (request, reply) => {
     const pathname = request.url.split('?')[0]!;
     if (!isDataRoute(pathname) || !request.apiKey) return;
-    if (!limit(app, reply, buckets, request.apiKey.id, policy)) return reply;
+    const result = consumeToken(buckets.get(request.apiKey.id), app.now().getTime(), policy.capacity, policy.refillPerSecond);
+    setBucket(buckets, request.apiKey.id, result.bucket);
+
+    const headers = { limit: policy.capacity, remaining: result.remaining, resetAfterSeconds: result.resetAfterSeconds };
+    const current = request.rateLimitHeaders;
+    const isMoreRestrictive = !current || result.remaining * current.limit < current.remaining * policy.capacity;
+    if (!result.allowed || isMoreRestrictive) {
+      request.rateLimitHeaders = headers;
+      setRateLimitHeaders(reply, headers);
+    }
+
+    if (!result.allowed) {
+      reply.header('Retry-After', Math.max(1, result.retryAfterSeconds));
+      return problem(reply, 429, 'rate_limited', 'The request rate limit has been reached.');
+    }
   });
 }
