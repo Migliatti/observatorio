@@ -5,6 +5,23 @@ const migration = readFileSync(new URL('./migrations/0009_least_privilege_roles.
 const followupPath = new URL('./migrations/0010_namespace_existing_roles.ts', import.meta.url);
 
 describe('least-privilege role migration', () => {
+  it('preflights permissions for existing namespaced roles before role DDL', () => {
+    const source = migration.toLowerCase();
+    const preflightEnd = source.indexOf('$migration_preflight$;', source.indexOf('do $migration_preflight$'));
+    const roleChangesStart = source.indexOf('do $roles$');
+
+    expect(source).toContain('rolcreaterole');
+    expect(source).toContain('pg_auth_members');
+    expect(source).toContain('admin_option');
+    expect(source).toContain('target.rolsuper');
+    expect(preflightEnd).toBeGreaterThan(0);
+    expect(source.indexOf('target.rolsuper')).toBeLessThan(preflightEnd);
+    expect(preflightEnd).toBeLessThan(roleChangesStart);
+    for (const role of ['observatorio_migrator', 'observatorio_collector', 'observatorio_api', 'observatorio_key_admin']) {
+      expect(source).toContain(`'${role}'`);
+    }
+  });
+
   it('creates and alters only roles namespaced to this application', () => {
     for (const role of ['migrator', 'collector', 'api', 'key_admin']) {
       const namespacedRole = `observatorio_${role}`;

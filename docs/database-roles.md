@@ -29,6 +29,9 @@ seus respectivos nomes de role `observatorio_*`. A URL pooled deve ser usada som
 O deploy também concede ao usuário que aplicou a migration membership em
 `observatorio_migrator` com `SET TRUE` e `INHERIT TRUE`: `SET` permite transferir propriedade
 dos objetos e `INHERIT` disponibiliza as permissões herdadas ao processo de deploy.
+Antes de alterar qualquer role, a 0009 verifica `CREATEROLE` e, para cada role
+`observatorio_*` que já exista, exige `ADMIN OPTION`; se alguma role alvo for `SUPERUSER`, exige uma
+conexão superuser. Se o preflight falhar, nenhuma alteração de role foi iniciada.
 
 ## Atualização de bancos com a 0009 antiga
 

@@ -3,6 +3,47 @@ import { sql, type Kysely } from 'kysely';
 /** Service roles are provisioned once per Postgres cluster; object grants are per database. */
 export async function up(db: Kysely<unknown>): Promise<void> {
   await sql.raw(`
+    do $migration_preflight$
+    declare can_create_roles boolean;
+    connection_is_superuser boolean;
+    existing_role text;
+    begin
+      select rolcreaterole or rolsuper, rolsuper into can_create_roles, connection_is_superuser
+      from pg_roles where rolname = current_user;
+      if not coalesce(can_create_roles, false) then
+        raise exception 'Migration 0009 requires a direct owner connection with CREATEROLE; use the bootstrap URL.';
+      end if;
+
+      if not coalesce(connection_is_superuser, false) then
+        foreach existing_role in array array[
+          'observatorio_migrator',
+          'observatorio_collector',
+          'observatorio_api',
+          'observatorio_key_admin'
+        ] loop
+          if exists (
+            select from pg_roles target
+            where target.rolname = existing_role
+              and target.rolsuper
+          ) then
+            raise exception 'Migration 0009 cannot alter pre-existing SUPERUSER role "%" as a non-superuser; run with a superuser connection or have an administrator correct the role first.', existing_role;
+          end if;
+
+          if exists (select from pg_roles where rolname = existing_role)
+            and not exists (
+              select from pg_auth_members membership
+              join pg_roles target on target.oid = membership.roleid
+              where target.rolname = existing_role
+                and membership.member = current_user::regrole
+                and membership.admin_option
+            ) then
+            raise exception 'Migration 0009 cannot administer pre-existing role "%": current role "%" needs ADMIN OPTION; use a bootstrap/superuser connection or have an administrator grant ADMIN OPTION first.', existing_role, current_user;
+          end if;
+        end loop;
+      end if;
+    end
+    $migration_preflight$;
+
     do $roles$
     begin
       if not exists (select from pg_roles where rolname = 'observatorio_migrator') then
