@@ -31,7 +31,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     do $migration_membership$
     begin
       if current_user <> 'observatorio_migrator' then
-        execute format('grant observatorio_migrator to %I', current_user);
+        execute format('grant observatorio_migrator to %I with set true, inherit true', current_user);
       end if;
     end
     $migration_membership$;

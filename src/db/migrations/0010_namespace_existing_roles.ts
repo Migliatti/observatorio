@@ -5,15 +5,22 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   await sql.raw(`
     do $migration_preflight$
     declare can_create_roles boolean;
+    connection_is_superuser boolean;
     existing_role text;
     begin
-      select rolcreaterole or rolsuper into can_create_roles
+      select rolcreaterole or rolsuper, rolsuper into can_create_roles, connection_is_superuser
       from pg_roles where rolname = current_user;
       if not coalesce(can_create_roles, false) then
         raise exception 'Migration 0010 requires a direct owner connection with CREATEROLE; temporarily use the bootstrap URL.';
       end if;
 
-      if not coalesce((select rolsuper from pg_roles where rolname = current_user), false) then
+      if exists (select from pg_roles where rolname = 'migrator')
+        and not coalesce(connection_is_superuser, false)
+        and not pg_has_role(current_user, 'migrator', 'USAGE') then
+        raise exception 'Migration 0010 requires inherited membership in legacy role migrator to transfer its owned objects; use the bootstrap owner or ask an administrator to grant inheritable membership first.';
+      end if;
+
+      if not coalesce(connection_is_superuser, false) then
         foreach existing_role in array array[
           'observatorio_migrator',
           'observatorio_collector',
@@ -71,7 +78,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     do $migration_membership$
     begin
       if current_user <> 'observatorio_migrator' then
-        execute format('grant observatorio_migrator to %I', current_user);
+        execute format('grant observatorio_migrator to %I with set true, inherit true', current_user);
       end if;
     end
     $migration_membership$;

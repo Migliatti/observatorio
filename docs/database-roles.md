@@ -26,6 +26,9 @@ precisa apontar para uma conexão owner com permissão de criar roles. Depois da
 migration, defina senhas para as roles de serviço com o comando interativo `\password`
 no `psql` e configure as URLs de API, coleta, migrations e gestão de chaves com
 seus respectivos nomes de role `observatorio_*`. A URL pooled deve ser usada somente pela API.
+O deploy também concede ao usuário que aplicou a migration membership em
+`observatorio_migrator` com `SET TRUE` e `INHERIT TRUE`: `SET` permite transferir propriedade
+dos objetos e `INHERIT` disponibiliza as permissões herdadas ao processo de deploy.
 
 ## Atualização de bancos com a 0009 antiga
 
@@ -44,6 +47,10 @@ da atualização. O preflight também interrompe a migration se alguma role alvo
 `npm run db:migrate`
 terminar, configure `MIGRATOR_DATABASE_URL`, `API_DATABASE_URL`, `COLLECTOR_DATABASE_URL` e
 `KEYS_DATABASE_URL` com as respectivas roles `observatorio_*`; API continua usando endpoint pooled.
+Se a role genérica legada `migrator` ainda existir, o preflight também exige que a conexão de deploy
+herde as permissões dela (`pg_has_role(..., 'migrator', 'USAGE')`), pois ela pode ser proprietária
+dos objetos que a 0010 transfere. A migration define explicitamente `SET TRUE` e `INHERIT TRUE` na
+membership do usuário de deploy com `observatorio_migrator`.
 
 A migration `0010` não cria, altera ou remove as definições das roles genéricas legadas, nem
 revoga grants atribuídos a elas. A propriedade das tabelas deste aplicativo que estava com a role

@@ -19,6 +19,10 @@ describe('least-privilege role migration', () => {
   it('includes a forward migration for existing databases', () => {
     expect(existsSync(followupPath)).toBe(true);
   });
+
+  it('grants the deploy connection SET and INHERIT access to the migrator role', () => {
+    expect(migration.toLowerCase()).toContain('with set true, inherit true');
+  });
 });
 
 describe.skipIf(!existsSync(followupPath))('namespace migration for existing databases', () => {
@@ -40,6 +44,23 @@ describe.skipIf(!existsSync(followupPath))('namespace migration for existing dat
     }
   });
 
+  it('requires inherited membership in the legacy migrator before transferring its objects', () => {
+    const followup = readFileSync(followupPath, 'utf8').toLowerCase();
+    const preflightEnd = followup.indexOf('$migration_preflight$;', followup.indexOf('do $migration_preflight$'));
+    const roleChangesStart = followup.indexOf('do $roles$');
+
+    expect(followup).toContain("pg_has_role(current_user, 'migrator', 'usage')");
+    expect(followup).toContain('inherited membership in legacy role migrator');
+    expect(preflightEnd).toBeGreaterThan(0);
+    expect(preflightEnd).toBeLessThan(roleChangesStart);
+  });
+
+  it('grants the deploy connection SET and INHERIT access to the namespaced migrator role', () => {
+    const followup = readFileSync(followupPath, 'utf8').toLowerCase();
+
+    expect(followup).toContain('with set true, inherit true');
+  });
+
   it('adopts existing objects without modifying generic cluster roles', () => {
     const followup = readFileSync(followupPath, 'utf8').toLowerCase();
     for (const role of ['migrator', 'collector', 'api', 'key_admin']) {
@@ -55,6 +76,5 @@ describe.skipIf(!existsSync(followupPath))('namespace migration for existing dat
     expect(followup).toContain('alter sequence public.api_key_id_seq owner to observatorio_migrator');
     expect(followup).toContain('grant update (last_used_at) on table public.api_key to observatorio_api');
     expect(followup).not.toMatch(/\b(?:create|alter|drop)\s+role\s+(?:migrator|collector|api|key_admin)\b/);
-    expect(followup).not.toMatch(/\b(?:migrator|collector|api|key_admin)\b/);
   });
 });
