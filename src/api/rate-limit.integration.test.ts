@@ -90,6 +90,40 @@ describe('rate-limit and CORS hooks', () => {
     expect(limited.headers['access-control-allow-origin']).toBe(allowedOrigin);
   });
 
+  it('uses forwarded client IPs only when the connecting proxy is explicitly trusted', async () => {
+    app = await buildApp({
+      db: createFakeDatabase(),
+      now: () => now,
+      rateLimits: { ip: { capacity: 1, windowSeconds: 60 }, apiKey: { capacity: 30, refillPerSecond: 1 } },
+      trustedProxies: ['127.0.0.1'],
+    });
+    const request = (forwardedFor: string) => app!.inject({
+      url: '/v1/exoplanets',
+      remoteAddress: '127.0.0.1',
+      headers: { 'x-forwarded-for': forwardedFor },
+    });
+
+    expect((await request('198.51.100.10')).statusCode).toBe(401);
+    expect((await request('198.51.100.11')).statusCode).toBe(401);
+    expect((await request('198.51.100.10')).statusCode).toBe(429);
+  });
+
+  it('does not trust forwarded IP headers by default', async () => {
+    app = await buildApp({
+      db: createFakeDatabase(),
+      now: () => now,
+      rateLimits: { ip: { capacity: 1, windowSeconds: 60 }, apiKey: { capacity: 30, refillPerSecond: 1 } },
+    });
+    const request = (forwardedFor: string) => app!.inject({
+      url: '/v1/exoplanets',
+      remoteAddress: '127.0.0.1',
+      headers: { 'x-forwarded-for': forwardedFor },
+    });
+
+    expect((await request('198.51.100.10')).statusCode).toBe(401);
+    expect((await request('198.51.100.11')).statusCode).toBe(429);
+  });
+
   it('allows the configured origin on data routes and exposes cache and rate-limit headers', async () => {
     app = await createApp();
     const response = await app.inject({ url: '/v1/data', headers: { authorization: `Bearer ${API_KEY}`, origin: allowedOrigin } });

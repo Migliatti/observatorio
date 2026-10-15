@@ -21,6 +21,10 @@ export const ConfigSchema = Type.Object({
     default: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173,http://localhost:3000',
     description: 'Comma-separated exact origins allowed to call data routes from a browser',
   }),
+  TRUSTED_PROXIES: Type.String({
+    default: '',
+    description: 'Comma-separated trusted proxy IPs or CIDRs; empty disables forwarded-header trust',
+  }),
 });
 
 export type Config = Static<typeof ConfigSchema>;

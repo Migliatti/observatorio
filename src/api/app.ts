@@ -24,6 +24,7 @@ export interface AppDependencies {
   now?: () => Date;
   rateLimits?: RateLimitPolicies;
   corsOrigins?: readonly string[];
+  trustedProxies?: readonly string[];
 }
 
 /**
@@ -36,8 +37,9 @@ export async function buildApp({
   now = () => new Date(),
   rateLimits = { ip: { capacity: 30, windowSeconds: 60 }, apiKey: { capacity: 30, refillPerSecond: 1 } },
   corsOrigins = ['https://kepler-lab-gamma.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+  trustedProxies = [],
 }: AppDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger });
+  const app = Fastify({ logger, trustProxy: trustedProxies.length > 0 ? [...trustedProxies] : false });
 
   app.decorate('db', db);
   app.decorate('now', now);

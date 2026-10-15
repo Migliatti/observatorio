@@ -18,6 +18,7 @@ describe('loadConfig', () => {
       RATE_LIMIT_IP_CAPACITY: 30,
       RATE_LIMIT_IP_WINDOW_SECONDS: 60,
       CORS_ORIGINS: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173,http://localhost:3000',
+      TRUSTED_PROXIES: '',
     });
   });
 
@@ -29,12 +30,14 @@ describe('loadConfig', () => {
       RATE_LIMIT_IP_CAPACITY: '9',
       RATE_LIMIT_IP_WINDOW_SECONDS: '120',
       CORS_ORIGINS: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173',
+      TRUSTED_PROXIES: '10.0.0.10,192.168.0.0/24',
     })).toMatchObject({
       RATE_LIMIT_KEY_CAPACITY: 12,
       RATE_LIMIT_KEY_REFILL_PER_SECOND: 2.5,
       RATE_LIMIT_IP_CAPACITY: 9,
       RATE_LIMIT_IP_WINDOW_SECONDS: 120,
       CORS_ORIGINS: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173',
+      TRUSTED_PROXIES: '10.0.0.10,192.168.0.0/24',
     });
   });
 

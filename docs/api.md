@@ -31,6 +31,12 @@ mantenha também as origens locais. `/health`, `/v1/status`, `/v1/openapi.json`
 e `/docs` aceitam qualquer origem. A API expõe `ETag`, `Retry-After` e os
 headers `RateLimit-*` ao navegador.
 
+O servidor não confia em `X-Forwarded-For` por padrão. Se estiver atrás de um
+proxy reverso, configure `TRUSTED_PROXIES` com os IPs ou CIDRs explícitos dos
+proxies, separados por vírgulas. Inclua somente proxies que removem ou sobrescrevem
+headers encaminhados recebidos do cliente; uma allowlist vazia mantém a confiança
+desativada.
+
 `/health`, `/v1/status`, `/v1/openapi.json` e `/docs` continuam acessíveis sem chave.
 O status expõe o resultado e fim da última coleta de cada fonte em `data.sources`
 e o frescor da última coleta bem-sucedida em `meta.sources`. O OpenAPI descreve

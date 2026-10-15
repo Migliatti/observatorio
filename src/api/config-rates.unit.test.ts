@@ -10,6 +10,7 @@ describe('rate-limit and CORS configuration', () => {
       RATE_LIMIT_IP_CAPACITY: 30,
       RATE_LIMIT_IP_WINDOW_SECONDS: 60,
       CORS_ORIGINS: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173,http://localhost:3000',
+      TRUSTED_PROXIES: '',
     });
 
     const configured = loadConfig({
@@ -19,6 +20,7 @@ describe('rate-limit and CORS configuration', () => {
       RATE_LIMIT_IP_CAPACITY: '8',
       RATE_LIMIT_IP_WINDOW_SECONDS: '120',
       CORS_ORIGINS: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173',
+      TRUSTED_PROXIES: '10.0.0.10,192.168.0.0/24',
     });
     expect(configured).toMatchObject({
       RATE_LIMIT_KEY_CAPACITY: 12,
@@ -26,6 +28,7 @@ describe('rate-limit and CORS configuration', () => {
       RATE_LIMIT_IP_CAPACITY: 8,
       RATE_LIMIT_IP_WINDOW_SECONDS: 120,
       CORS_ORIGINS: 'https://kepler-lab-gamma.vercel.app,http://localhost:5173',
+      TRUSTED_PROXIES: '10.0.0.10,192.168.0.0/24',
     });
   });
 });
