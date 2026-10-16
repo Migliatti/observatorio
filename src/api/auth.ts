@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { hashApiKey } from '../db/api-key.js';
-import { problem, problemResponseSchema } from './problem.js';
+import { invalidApiKeyProblemResponse, problem, rateLimitedProblemResponse } from './problem.js';
 
 const CACHE_MS = 60_000;
 const LAST_USED_MS = 5 * 60_000;
@@ -25,24 +25,20 @@ export function installApiKeyAuth(app: FastifyInstance): void {
       'RateLimit-Remaining': { type: 'integer', description: 'Requests remaining in the active limit.' },
       'RateLimit-Reset': { type: 'integer', description: 'Seconds until the active limit resets.' },
     };
+    const representationHeaders = {
+      ETag: { type: 'string', description: 'Validator for this representation.' },
+      'Cache-Control': { type: 'string', description: 'Cache policy for this representation.' },
+    };
     const response = { ...(route.schema?.response as Record<string, Record<string, unknown>> | undefined) };
     const success = response['200'];
     if (success) {
       response['200'] = {
         ...success,
-        headers: {
-          ...rateLimitHeaders,
-          ETag: { type: 'string', description: 'Validator for this successful representation.' },
-          'Cache-Control': { type: 'string', description: 'Cache policy for this representation.' },
-        },
+        headers: { ...rateLimitHeaders, ...representationHeaders },
       };
       response['304'] = {
         type: 'null', description: 'The representation has not changed.',
-        headers: {
-          ...rateLimitHeaders,
-          ETag: { type: 'string', description: 'Validator for this representation.' },
-          'Cache-Control': { type: 'string', description: 'Cache policy for this representation.' },
-        },
+        headers: { ...rateLimitHeaders, ...representationHeaders },
       };
     }
     route.schema = {
@@ -50,9 +46,9 @@ export function installApiKeyAuth(app: FastifyInstance): void {
       security: [{ bearerAuth: [] }],
       response: {
         ...response,
-        401: problemResponseSchema,
+        401: invalidApiKeyProblemResponse,
         429: {
-          ...problemResponseSchema,
+          ...rateLimitedProblemResponse,
           headers: { ...rateLimitHeaders, 'Retry-After': { type: 'integer', description: 'Seconds to wait before retrying.' } },
         },
       },

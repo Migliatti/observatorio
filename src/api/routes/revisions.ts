@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { Type, type Static } from 'typebox';
 import { EXOPLANET_PARAMETER_FIELDS, type ExoplanetParameters } from '../../domain/exoplanet.js';
 import { changedFields } from '../../domain/revision.js';
-import { problem, problemResponseSchema } from '../problem.js';
+import { inputOrCursorProblemResponse, notFoundProblemResponse, problem } from '../problem.js';
 import { metaSchema, sourceMeta } from '../source-meta.js';
 import { exoplanetSchema } from './exoplanets.js';
 
@@ -49,7 +49,7 @@ export async function revisionRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { name: string }; Querystring: Static<typeof querySchema> }>('/v1/exoplanets/:name/revisions', {
     schema: { tags: ['Exoplanets'], summary: 'List historical parameter snapshots, newest first',
       params: Type.Object({ name: Type.String({ minLength: 1, maxLength: 200 }) }), querystring: querySchema,
-      response: { 200: Type.Object({ data: Type.Array(revisionSchema), meta: Type.Object({ ...metaSchema.properties, next_cursor: nullableString }) }), 400: problemResponseSchema, 404: problemResponseSchema },
+      response: { 200: Type.Object({ data: Type.Array(revisionSchema), meta: Type.Object({ ...metaSchema.properties, next_cursor: nullableString }) }), 400: inputOrCursorProblemResponse, 404: notFoundProblemResponse },
     },
   }, async (request, reply) => app.db.transaction().setIsolationLevel('repeatable read').execute(async (db) => {
     let planetQuery = db.selectFrom('exoplanet').select('id').where('name', '=', request.params.name);

@@ -4,7 +4,7 @@ import { CATALOGUE_RETENTION_MS, EXOPLANET_CATALOGUE_LOCK } from '../../db/exopl
 import { freshness } from '../../domain/freshness.js';
 import type { FastifyInstance } from 'fastify';
 import { Type, type Static } from 'typebox';
-import { problem, problemResponseSchema } from '../problem.js';
+import { inputOrCursorProblemResponse, invalidInputProblemResponse, notFoundProblemResponse, problem } from '../problem.js';
 import { EXOPLANET_ARCHIVE_ATTRIBUTION, metaSchema, sourceMeta } from '../source-meta.js';
 
 const nullableNumber = Type.Union([Type.Number(), Type.Null()]);
@@ -81,7 +81,7 @@ function decodeCursor(encoded: string, expectedBinding: string, sort: Sort, now:
 export async function exoplanetRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: ListQuery }>('/v1/exoplanets', {
     schema: { tags: ['Exoplanets'], summary: 'List confirmed exoplanets', querystring: listQuery,
-      response: { 200: Type.Object({ data: Type.Array(exoplanetSchema), meta: Type.Object({ ...metaSchema.properties, next_cursor: nullableString, updates_available: Type.Boolean(), snapshot_expires_at: nullableTimestamp }) }), 400: problemResponseSchema },
+      response: { 200: Type.Object({ data: Type.Array(exoplanetSchema), meta: Type.Object({ ...metaSchema.properties, next_cursor: nullableString, updates_available: Type.Boolean(), snapshot_expires_at: nullableTimestamp }) }), 400: inputOrCursorProblemResponse },
     },
   }, async (request, reply) => {
     const firstPage = request.query.cursor === undefined;
@@ -144,7 +144,7 @@ export async function exoplanetRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { name: string }; Querystring: Static<typeof detailQuery> }>('/v1/exoplanets/:name', {
     schema: { tags: ['Exoplanets'], summary: 'Get an exoplanet by its URL-encoded Archive name',
       params: Type.Object({ name: Type.String({ minLength: 1, maxLength: 200 }) }), querystring: detailQuery,
-      response: { 200: Type.Object({ data: exoplanetSchema, meta: metaSchema }), 400: problemResponseSchema, 404: problemResponseSchema },
+      response: { 200: Type.Object({ data: exoplanetSchema, meta: metaSchema }), 400: invalidInputProblemResponse, 404: notFoundProblemResponse },
     },
   }, async (request, reply) => {
     return app.db.transaction().setIsolationLevel('repeatable read').execute(async (db) => {

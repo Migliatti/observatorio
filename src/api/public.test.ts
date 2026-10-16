@@ -66,26 +66,40 @@ describe('public API discovery', () => {
     }
     for (const path of registeredApiPaths) expect(document.paths).toHaveProperty(path);
     expect(document.components.securitySchemes.bearerAuth).toMatchObject({ type: 'http', scheme: 'bearer' });
-    for (const path of ['/v1/exoplanets', '/v1/exoplanets/{name}', '/v1/exoplanets/{name}/revisions', '/v1/close-approaches']) {
-      expect(document.paths[path].get.security).toEqual([{ bearerAuth: [] }]);
-      expect(document.paths[path].get.responses).toHaveProperty('401');
-      expect(document.paths[path].get.responses['200'].headers).toMatchObject({
+    const protectedRoutes = [
+      { path: '/v1/exoplanets', badRequestCodes: ['invalid_input', 'invalid_cursor'] },
+      { path: '/v1/exoplanets/{name}', badRequestCodes: ['invalid_input'] },
+      { path: '/v1/exoplanets/{name}/revisions', badRequestCodes: ['invalid_input', 'invalid_cursor'] },
+      { path: '/v1/close-approaches', badRequestCodes: ['invalid_input', 'invalid_cursor'] },
+    ];
+    for (const { path, badRequestCodes } of protectedRoutes) {
+      const operation = document.paths[path].get;
+      expect(operation.security).toEqual([{ bearerAuth: [] }]);
+      expect(operation.responses).toHaveProperty('401');
+      expect(operation.responses['200'].headers).toMatchObject({
         ETag: { schema: { type: 'string' } },
         'Cache-Control': { schema: { type: 'string' } },
         'RateLimit-Limit': { schema: { type: 'integer' } },
         'RateLimit-Remaining': { schema: { type: 'integer' } },
         'RateLimit-Reset': { schema: { type: 'integer' } },
       });
-      expect(document.paths[path].get.responses['304'].headers).toHaveProperty('ETag');
+      expect(operation.responses['304'].headers).toHaveProperty('ETag');
       for (const status of ['400', '401', '429', '500']) {
-        expect(document.paths[path].get.responses[status].content).toHaveProperty('application/problem+json');
+        expect(operation.responses[status].content).toHaveProperty('application/problem+json');
       }
-      expect(document.paths[path].get.responses['429'].headers).toHaveProperty('Retry-After');
-      const errorCodes = document.paths[path].get.responses['500'].content['application/problem+json'].schema.properties.code.anyOf
-        .flatMap((option: { enum?: string[] }) => option.enum ?? []);
-      expect(errorCodes).toEqual(expect.arrayContaining([
-        'invalid_input', 'invalid_cursor', 'invalid_api_key', 'not_found', 'rate_limited', 'internal_error',
-      ]));
+      expect(operation.responses['429'].headers).toHaveProperty('Retry-After');
+      const codesFor = (status: string) => {
+        const code = operation.responses[status].content['application/problem+json'].schema.properties.code;
+        return code.enum ?? code.anyOf.flatMap((option: { enum?: string[] }) => option.enum ?? []);
+      };
+      expect(codesFor('400')).toEqual(badRequestCodes);
+      expect(codesFor('401')).toEqual(['invalid_api_key']);
+      expect(codesFor('429')).toEqual(['rate_limited']);
+      expect(codesFor('500')).toEqual(['internal_error']);
+    }
+    for (const path of ['/v1/exoplanets/{name}', '/v1/exoplanets/{name}/revisions']) {
+      const code = document.paths[path].get.responses['404'].content['application/problem+json'].schema.properties.code;
+      expect(code.enum ?? code.anyOf.flatMap((option: { enum?: string[] }) => option.enum ?? [])).toEqual(['not_found']);
     }
     expect(document.paths['/v1/status'].get.security).toBeUndefined();
     expect(document.paths['/v1/status'].get.responses['200'].headers).toBeUndefined();

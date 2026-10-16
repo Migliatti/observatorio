@@ -19,15 +19,23 @@ function safeErrorType(error: unknown): string {
   }
 }
 
-export const problemSchema = Type.Object({
-  type: Type.String(), title: Type.String(), status: Type.Integer(),
-  code: Type.Union(['invalid_input', 'invalid_cursor', 'invalid_api_key', 'not_found', 'rate_limited', 'internal_error'].map((code) => Type.Literal(code))),
-  detail: Type.String(),
-});
-export const problemResponseSchema = {
-  description: 'A stable error response in Problem Details format.',
-  content: { 'application/problem+json': { schema: problemSchema } },
-};
+export const PROBLEM_CODES = ['invalid_input', 'invalid_cursor', 'invalid_api_key', 'not_found', 'rate_limited', 'internal_error'] as const;
+export type ProblemCode = typeof PROBLEM_CODES[number];
+export function problemResponseSchema(codes: readonly ProblemCode[]) {
+  return {
+    description: 'A stable error response in Problem Details format.',
+    content: { 'application/problem+json': { schema: Type.Object({
+      type: Type.String(), title: Type.String(), status: Type.Integer(),
+      code: codes.length === 1 ? Type.Literal(codes[0]!) : Type.Union(codes.map((code) => Type.Literal(code))),
+      detail: Type.String(),
+    }) } },
+  };
+}
+export const invalidInputProblemResponse = problemResponseSchema(['invalid_input']);
+export const inputOrCursorProblemResponse = problemResponseSchema(['invalid_input', 'invalid_cursor']);
+export const notFoundProblemResponse = problemResponseSchema(['not_found']);
+export const invalidApiKeyProblemResponse = problemResponseSchema(['invalid_api_key']);
+export const rateLimitedProblemResponse = problemResponseSchema(['rate_limited']);
 export function problem(reply: FastifyReply, status: number, code: string, detail: string) {
   reply.request.problemCode = code;
   const title = status === 404 ? 'Not Found' : status === 401 ? 'Unauthorized' : status === 400 ? 'Bad Request'
@@ -41,7 +49,7 @@ export function installProblemHandler(app: FastifyInstance): void {
     if (!route.url.startsWith('/v1/')) return;
     route.schema = {
       ...route.schema,
-      response: { ...(route.schema?.response as Record<string, unknown> | undefined), 500: problemResponseSchema },
+      response: { ...(route.schema?.response as Record<string, unknown> | undefined), 500: problemResponseSchema(['internal_error']) },
     };
   });
   app.setErrorHandler<FastifyError>((error, _request, reply) => {
