@@ -49,18 +49,70 @@ describe('public API discovery', () => {
     expect(response.statusCode).toBe(200);
     const document = response.json();
     expect(document.openapi).toBe('3.1.0');
-    expect(document.paths).toHaveProperty('/v1/exoplanets');
+    const documentedPaths = [
+      '/v1/status', '/v1/openapi.json', '/v1/exoplanets', '/v1/exoplanets/{name}',
+      '/v1/exoplanets/{name}/revisions', '/v1/close-approaches',
+    ];
+    for (const path of documentedPaths) expect(document.paths).toHaveProperty(path);
+    const routeStack: string[] = [];
+    const registeredApiPaths: string[] = [];
+    for (const line of app.printRoutes({ commonPrefix: false }).split('\n')) {
+      const match = /^([│ ]*)[├└]── (.+) \(([^)]+)\)$/.exec(line);
+      if (!match || !match[3]!.split(', ').includes('GET')) continue;
+      const level = match[1]!.length / 4;
+      const path = level === 0 ? match[2]! : `${routeStack[level - 1]}${match[2]}`;
+      routeStack[level] = path;
+      if (path.startsWith('/v1/')) registeredApiPaths.push(path.replace(/:([^/]+)/g, '{$1}'));
+    }
+    for (const path of registeredApiPaths) expect(document.paths).toHaveProperty(path);
     expect(document.components.securitySchemes.bearerAuth).toMatchObject({ type: 'http', scheme: 'bearer' });
-    for (const path of ['/v1/exoplanets', '/v1/exoplanets/{name}', '/v1/exoplanets/{name}/revisions', '/v1/close-approaches']) {
-      expect(document.paths[path].get.security).toEqual([{ bearerAuth: [] }]);
-      expect(document.paths[path].get.responses).toHaveProperty('401');
+    const protectedRoutes = [
+      { path: '/v1/exoplanets', badRequestCodes: ['invalid_input', 'invalid_cursor'] },
+      { path: '/v1/exoplanets/{name}', badRequestCodes: ['invalid_input'] },
+      { path: '/v1/exoplanets/{name}/revisions', badRequestCodes: ['invalid_input', 'invalid_cursor'] },
+      { path: '/v1/close-approaches', badRequestCodes: ['invalid_input', 'invalid_cursor'] },
+    ];
+    for (const { path, badRequestCodes } of protectedRoutes) {
+      const operation = document.paths[path].get;
+      expect(operation.security).toEqual([{ bearerAuth: [] }]);
+      expect(operation.responses).toHaveProperty('401');
+      expect(operation.responses['200'].headers).toMatchObject({
+        ETag: { schema: { type: 'string' } },
+        'Cache-Control': { schema: { type: 'string' } },
+        'RateLimit-Limit': { schema: { type: 'integer' } },
+        'RateLimit-Remaining': { schema: { type: 'integer' } },
+        'RateLimit-Reset': { schema: { type: 'integer' } },
+      });
+      expect(operation.responses['304'].headers).toHaveProperty('ETag');
+      for (const status of ['400', '401', '429', '500']) {
+        expect(operation.responses[status].content).toHaveProperty('application/problem+json');
+      }
+      expect(operation.responses['429'].headers).toHaveProperty('Retry-After');
+      const codesFor = (status: string) => {
+        const code = operation.responses[status].content['application/problem+json'].schema.properties.code;
+        return code.enum ?? code.anyOf.flatMap((option: { enum?: string[] }) => option.enum ?? []);
+      };
+      expect(codesFor('400')).toEqual(badRequestCodes);
+      expect(codesFor('401')).toEqual(['invalid_api_key']);
+      expect(codesFor('429')).toEqual(['rate_limited']);
+      expect(codesFor('500')).toEqual(['internal_error']);
+    }
+    for (const path of ['/v1/exoplanets/{name}', '/v1/exoplanets/{name}/revisions']) {
+      const code = document.paths[path].get.responses['404'].content['application/problem+json'].schema.properties.code;
+      expect(code.enum ?? code.anyOf.flatMap((option: { enum?: string[] }) => option.enum ?? [])).toEqual(['not_found']);
     }
     expect(document.paths['/v1/status'].get.security).toBeUndefined();
+    expect(document.paths['/v1/status'].get.responses['200'].headers).toBeUndefined();
     const docs = await app.inject('/docs');
     expect(docs.statusCode).toBe(200);
     expect(docs.headers['content-type']).toContain('text/html');
     expect(docs.body).toContain('/v1/openapi.json');
     expect(docs.body).toContain('Authorization: Bearer');
+    expect(docs.body).toContain('RateLimit-Limit');
+    expect(docs.body).toContain('ETag');
+    expect(docs.body).toContain('invalid_cursor');
+    expect(docs.body).toContain('This research has made use of the NASA Exoplanet Archive');
+    expect(docs.body).toContain('NASA/JPL Center for Near Earth Object Studies (CNEOS)');
   });
 
   it.each(['/v1/exoplanets', '/v1/exoplanets/HD%202039%20b', '/v1/exoplanets/HD%202039%20b/revisions', '/v1/close-approaches'])('requires a key on %s before processing data', async (url) => {

@@ -40,7 +40,8 @@ desativada.
 `/health`, `/v1/status`, `/v1/openapi.json` e `/docs` continuam acessíveis sem chave.
 O status expõe o resultado e fim da última coleta de cada fonte em `data.sources`
 e o frescor da última coleta bem-sucedida em `meta.sources`. O OpenAPI descreve
-os schemas e a autenticação Bearer das rotas; `/docs` contém o guia público.
+os schemas TypeBox das rotas registradas, a autenticação Bearer, os cabeçalhos de
+limite e cache e os códigos estáveis de erro; `/docs` contém o guia público.
 
 As rotas de dados enviam `Cache-Control: private, no-cache` e um `ETag` calculado
 pela URL e pela representação serializada, que inclui a versão de coleta
@@ -157,5 +158,6 @@ Sem qualquer janela ou evento conhecido, ambos os limites são `null`.
 ## Erros
 
 Erros usam `application/problem+json` com `type`, `title`, `status`, `code` e
-`detail`. Códigos: `invalid_input` (400), `invalid_cursor` (400), `invalid_api_key` (401), `not_found` (404)
-e `internal_error` (500). Trate o `code`, pois o texto não é um contrato estável.
+`detail`. Códigos: `invalid_input` (400), `invalid_cursor` (400),
+`invalid_api_key` (401), `not_found` (404), `rate_limited` (429) e
+`internal_error` (500). Trate o `code`, pois o texto não é um contrato estável.
