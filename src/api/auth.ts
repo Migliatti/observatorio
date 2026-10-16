@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { hashApiKey } from '../db/api-key.js';
-import { problem, problemSchema } from './problem.js';
+import { problem, problemResponseSchema } from './problem.js';
 
 const CACHE_MS = 60_000;
 const LAST_USED_MS = 5 * 60_000;
@@ -20,10 +20,42 @@ export function installApiKeyAuth(app: FastifyInstance): void {
   app.decorateRequest('apiKey', null);
   app.addHook('onRoute', (route) => {
     if (!isDataRoute(route.url)) return;
+    const rateLimitHeaders = {
+      'RateLimit-Limit': { type: 'integer', description: 'Maximum requests allowed by the active limit.' },
+      'RateLimit-Remaining': { type: 'integer', description: 'Requests remaining in the active limit.' },
+      'RateLimit-Reset': { type: 'integer', description: 'Seconds until the active limit resets.' },
+    };
+    const response = { ...(route.schema?.response as Record<string, Record<string, unknown>> | undefined) };
+    const success = response['200'];
+    if (success) {
+      response['200'] = {
+        ...success,
+        headers: {
+          ...rateLimitHeaders,
+          ETag: { type: 'string', description: 'Validator for this successful representation.' },
+          'Cache-Control': { type: 'string', description: 'Cache policy for this representation.' },
+        },
+      };
+      response['304'] = {
+        type: 'null', description: 'The representation has not changed.',
+        headers: {
+          ...rateLimitHeaders,
+          ETag: { type: 'string', description: 'Validator for this representation.' },
+          'Cache-Control': { type: 'string', description: 'Cache policy for this representation.' },
+        },
+      };
+    }
     route.schema = {
       ...route.schema,
       security: [{ bearerAuth: [] }],
-      response: { ...(route.schema?.response as Record<string, unknown> | undefined), 401: problemSchema, 429: problemSchema },
+      response: {
+        ...response,
+        401: problemResponseSchema,
+        429: {
+          ...problemResponseSchema,
+          headers: { ...rateLimitHeaders, 'Retry-After': { type: 'integer', description: 'Seconds to wait before retrying.' } },
+        },
+      },
     };
   });
   app.addHook('onRequest', async (request, reply) => {

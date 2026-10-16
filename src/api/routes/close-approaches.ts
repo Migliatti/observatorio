@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { sql } from 'kysely';
 import { Type, type Static } from 'typebox';
-import { problem, problemSchema } from '../problem.js';
+import { problem, problemResponseSchema } from '../problem.js';
 import { metaSchema, sourceMeta } from '../source-meta.js';
 
 const nullableNumber = Type.Union([Type.Number(), Type.Null()]);
@@ -36,7 +36,7 @@ function decodeCursor(encoded: string, binding: string): Cursor | null {
 export async function closeApproachRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: Query }>('/v1/close-approaches', {
     schema: { tags: ['Close approaches'], summary: 'List asteroid close approaches', querystring: querySchema, response: {
-      200: Type.Object({ data: Type.Array(closeApproachSchema), meta: Type.Object({ ...metaSchema.properties, coverage: Type.Object({ from: Type.Union([dateSchema, Type.Null()]), to: Type.Union([dateSchema, Type.Null()]) }), next_cursor: nullableString }) }), 400: problemSchema,
+      200: Type.Object({ data: Type.Array(closeApproachSchema), meta: Type.Object({ ...metaSchema.properties, coverage: Type.Object({ from: Type.Union([dateSchema, Type.Null()]), to: Type.Union([dateSchema, Type.Null()]) }), next_cursor: nullableString }) }), 400: problemResponseSchema,
     } },
   }, async (request, reply) => {
     const now = app.now();
