@@ -35,6 +35,14 @@ export async function up(db: Kysely<unknown>): Promise<void> {
             raise exception 'Migration 0010 cannot alter pre-existing SUPERUSER role "%" as a non-superuser; run with a superuser connection or have an administrator correct the role first.', existing_role;
           end if;
 
+          if exists (
+            select from pg_roles target
+            where target.rolname = existing_role
+              and (target.rolbypassrls or target.rolreplication)
+          ) then
+            raise exception 'Migration 0010 cannot alter pre-existing BYPASSRLS or REPLICATION role "%" as a non-superuser; have an administrator remove those attributes first.', existing_role;
+          end if;
+
           if exists (select from pg_roles where rolname = existing_role)
             and not exists (
               select from pg_auth_members membership
@@ -55,22 +63,46 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       if not exists (select from pg_roles where rolname = 'observatorio_migrator') then
         create role observatorio_migrator login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role observatorio_migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        else
+          -- Mentioning NOSUPERUSER or NOBYPASSRLS itself requires elevated privileges.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_migrator with login nocreatedb nocreaterole noinherit;
+        end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_collector') then
         create role observatorio_collector login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role observatorio_collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        else
+          -- Mentioning NOSUPERUSER or NOBYPASSRLS itself requires elevated privileges.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_collector with login nocreatedb nocreaterole noinherit;
+        end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_api') then
         create role observatorio_api login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role observatorio_api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        else
+          -- Mentioning NOSUPERUSER or NOBYPASSRLS itself requires elevated privileges.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_api with login nocreatedb nocreaterole noinherit;
+        end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_key_admin') then
         create role observatorio_key_admin login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
       else
-        alter role observatorio_key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        else
+          -- Mentioning NOSUPERUSER or NOBYPASSRLS itself requires elevated privileges.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_key_admin with login nocreatedb nocreaterole noinherit;
+        end if;
       end if;
     end
     $roles$;

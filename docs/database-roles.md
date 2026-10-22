@@ -23,8 +23,8 @@ a propriedade das tabelas da aplicação para `observatorio_migrator` e aplica o
 grants mínimos. O prefixo `observatorio_` evita alterar papéis homônimos de outros
 aplicativos no mesmo cluster. Na primeira execução, `MIGRATOR_DATABASE_URL`
 precisa apontar para uma conexão owner com permissão de criar roles. Depois da
-migration, defina senhas para as roles de serviço com o comando interativo `\password`
-no `psql` e configure as URLs de API, coleta, migrations e gestão de chaves com
+migration, defina senhas independentes para as roles de serviço e configure as URLs
+de API, coleta, migrations e gestão de chaves com
 seus respectivos nomes de role `observatorio_*`. A URL pooled deve ser usada somente pela API.
 O deploy também concede ao usuário que aplicou a migration membership em
 `observatorio_migrator` com `SET TRUE` e `INHERIT TRUE`: `SET` permite transferir propriedade
@@ -32,6 +32,38 @@ dos objetos e `INHERIT` disponibiliza as permissões herdadas ao processo de dep
 Antes de alterar qualquer role, a 0009 verifica `CREATEROLE` e, para cada role
 `observatorio_*` que já exista, exige `ADMIN OPTION`; se alguma role alvo for `SUPERUSER`, exige uma
 conexão superuser. Se o preflight falhar, nenhuma alteração de role foi iniciada.
+
+Para conexões de bootstrap sem `SUPERUSER` (como o owner do Neon), as migrations
+não incluem `NOSUPERUSER` nem `NOBYPASSRLS` no `ALTER ROLE`: mencionar esses atributos
+exige privilégios adicionais mesmo quando já estão desativados. O preflight rejeita
+roles existentes com `SUPERUSER`, `BYPASSRLS` ou `REPLICATION` antes de alterar qualquer
+role; um administrador precisa corrigir esses atributos primeiro. As roles novas
+continuam sendo criadas com privilégios mínimos.
+
+## Senhas e destino dos segredos
+
+No bootstrap validado no Neon, o painel recusou redefinir senhas de roles ainda sem
+senha e o `psql \password` falhou com `Neon only supports being given plaintext passwords`.
+Nesse ambiente, use `ALTER ROLE ... PASSWORD` por uma conexão owner direta com TLS.
+Receba a senha por um prompt oculto (por exemplo, `Read-Host -AsSecureString`) e
+construa o literal SQL com `pg.escapeLiteral`, nunca por concatenação de entrada sem
+escape. Não coloque senhas no histórico, em SQL salvo, em logs ou em arquivos versionados;
+remova variáveis temporárias em um bloco `finally`.
+
+Depois de definir cada senha, teste uma nova conexão com aquele papel e execute
+`SELECT current_user` antes de substituir as credenciais de bootstrap:
+
+| Segredo | Destino | Papel / conexão |
+| --- | --- | --- |
+| `MIGRATOR_DATABASE_URL` | GitHub Actions | `observatorio_migrator`, direta; substitui a URL temporária de owner |
+| `COLLECTOR_DATABASE_URL` | GitHub Actions | `observatorio_collector`, direta |
+| `API_DATABASE_URL` | Environment do serviço Render | `observatorio_api`, pooled |
+| `KEYS_DATABASE_URL` | `.env` local, ignorado pelo Git | `observatorio_key_admin`, direta |
+
+Em outra máquina, configure apenas os segredos locais necessários. Papéis, senhas e
+migrations já aplicadas ficam no Neon; secrets do Actions e variáveis do Render ficam
+nos respectivos serviços. Senhas com caracteres reservados precisam de codificação
+percentual ao montar URLs; prefira o gerador de conexão do Neon.
 
 ## Atualização de bancos com a 0009 antiga
 
@@ -70,9 +102,11 @@ de DML e de sequência necessários para cada nova tabela de coleta. A role `obs
 recebe `SELECT` automaticamente em tabelas futuras criadas por `observatorio_migrator`; os
 grants de escrita permanecem explícitos.
 
-## Verificação externa pendente
+## Validação externa
 
-O código e as verificações locais não determinam se a criação SQL dessas roles e a
-transferência de propriedade são permitidas no projeto/plano Neon Free usado em
-produção. Essa capacidade precisa ser confirmada no deploy antes de aplicar as
-migrations. Não houve conexão nem tentativa de aplicar migration em Neon.
+No bootstrap de produção do Observatório, as migrations `0001` a `0010` foram
+aplicadas no Neon e o codegen identificou oito tabelas. Os quatro papéis tiveram
+seus logins testados com `SELECT current_user`; a API foi testada pelo endpoint pooled.
+Isso confirma o bootstrap e os logins nesse ambiente, mas não substitui testes de
+privilégios nem a validação da coleta e do deploy reais. Os testes locais de privilégios
+continuam necessários. Não registre senhas nem URLs de conexão como evidência.
