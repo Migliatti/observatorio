@@ -84,3 +84,6 @@ e-mail do Actions e a ausência de sinal com alerta do Healthchecks. Esse últim
 critério da #29 permanece **pendente de validação externa**. Não foi provocado
 incidente remoto, disparado alerta, enviado e-mail nem acionado workflow remoto
 durante os testes locais.
+
+O job so executa em `refs/heads/main`, inclusive em disparos manuais. Selecionar
+outra branch nao recebe o segredo do check nem envia sinal de sucesso.
