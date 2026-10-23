@@ -105,3 +105,34 @@ it.each([
     await db.destroy();
   }
 });
+
+it.each([
+  ['0009', initialRoles],
+  ['0010', namespaceRoles],
+] as const)('%s removes elevated service-role attributes when run as superuser', async (_name, migrate) => {
+  const db = bootstrapDatabase();
+  try {
+    const trx = await db.startTransaction().execute();
+    try {
+      await sql.raw(`
+        alter role observatorio_migrator superuser bypassrls replication createdb createrole;
+        alter role observatorio_collector superuser bypassrls replication createdb createrole;
+        alter role observatorio_api superuser bypassrls replication createdb createrole;
+        alter role observatorio_key_admin superuser bypassrls replication createdb createrole;
+      `).execute(trx);
+      await migrate(trx);
+      const { rows } = await sql<{ elevated: boolean; rolcanlogin: boolean }>`
+        select rolsuper or rolbypassrls or rolreplication or rolcreatedb or rolcreaterole as elevated,
+          rolcanlogin
+        from pg_roles
+        where rolname in ('observatorio_migrator', 'observatorio_collector', 'observatorio_api', 'observatorio_key_admin')
+      `.execute(trx);
+      expect(rows).toHaveLength(4);
+      expect(rows.every((role) => role.rolcanlogin && !role.elevated)).toBe(true);
+    } finally {
+      await trx.rollback().execute();
+    }
+  } finally {
+    await db.destroy();
+  }
+});

@@ -44,7 +44,8 @@ continuam sendo criadas com privilégios mínimos.
 nesse caso, o `ALTER ROLE` omite o atributo. Se algum papel existente tiver `CREATEDB`,
 o preflight exige que o bootstrap também possua esse privilégio para removê-lo;
 caso contrário, falha antes de alterar qualquer papel e orienta a correção por um
-administrador. O caminho superuser continua removendo os atributos elevados.
+administrador. O caminho superuser remove explicitamente `SUPERUSER`, `BYPASSRLS`, `REPLICATION`,
+`CREATEDB` e `CREATEROLE` dos papéis existentes.
 
 ## Senhas e destino dos segredos
 

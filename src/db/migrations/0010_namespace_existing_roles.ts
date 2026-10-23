@@ -68,10 +68,10 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     do $roles$
     begin
       if not exists (select from pg_roles where rolname = 'observatorio_migrator') then
-        create role observatorio_migrator login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_migrator login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
         if (select rolsuper from pg_roles where rolname = current_user) then
-          alter role observatorio_migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+          alter role observatorio_migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
         else
           -- Mentioning restricted attributes requires the corresponding privilege.
           -- The preflight already rejects existing elevated service roles.
@@ -82,10 +82,10 @@ export async function up(db: Kysely<unknown>): Promise<void> {
         end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_collector') then
-        create role observatorio_collector login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_collector login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
         if (select rolsuper from pg_roles where rolname = current_user) then
-          alter role observatorio_collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+          alter role observatorio_collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
         else
           -- Mentioning restricted attributes requires the corresponding privilege.
           -- The preflight already rejects existing elevated service roles.
@@ -96,10 +96,10 @@ export async function up(db: Kysely<unknown>): Promise<void> {
         end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_api') then
-        create role observatorio_api login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_api login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
         if (select rolsuper from pg_roles where rolname = current_user) then
-          alter role observatorio_api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+          alter role observatorio_api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
         else
           -- Mentioning restricted attributes requires the corresponding privilege.
           -- The preflight already rejects existing elevated service roles.
@@ -110,10 +110,10 @@ export async function up(db: Kysely<unknown>): Promise<void> {
         end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_key_admin') then
-        create role observatorio_key_admin login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_key_admin login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
         if (select rolsuper from pg_roles where rolname = current_user) then
-          alter role observatorio_key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+          alter role observatorio_key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
         else
           -- Mentioning restricted attributes requires the corresponding privilege.
           -- The preflight already rejects existing elevated service roles.
