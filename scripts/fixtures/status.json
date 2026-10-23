@@ -1,0 +1,14 @@
+{
+  "data": {
+    "sources": [
+      { "name": "exoplanet-archive", "last_run_status": "succeeded", "last_run_finished_at": "2026-10-22T10:00:00.000Z" },
+      { "name": "neows", "last_run_status": "failed", "last_run_finished_at": "2026-10-22T11:00:00.000Z" }
+    ]
+  },
+  "meta": {
+    "sources": [
+      { "name": "exoplanet-archive", "data_as_of": "2026-10-22T10:00:00.000Z", "stale": false, "attribution": "NASA Exoplanet Archive" },
+      { "name": "neows", "data_as_of": "2026-10-22T09:00:00.000Z", "stale": false, "attribution": "NASA/JPL CNEOS NeoWs" }
+    ]
+  }
+}
