@@ -1,0 +1,126 @@
+name: Deploy
+
+# A push to main first runs CI. Never grant deployment secrets to PR runs.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Do not interrupt a migration. Drop obsolete runs with SHA checks instead.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require current main SHA
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            if (data.commit.sha !== context.payload.workflow_run.head_sha) {
+              core.setFailed('Obsolete CI run: main has advanced. No migration or deploy.');
+            }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate deployment configuration
+        env:
+          MIGRATOR_DATABASE_URL: ${{ secrets.MIGRATOR_DATABASE_URL }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          node --input-type=module <<'NODE'
+          // Never print input values or URL parser errors: both URLs carry credentials.
+          try {
+            const db = new URL(process.env.MIGRATOR_DATABASE_URL);
+            const hook = new URL(process.env.RENDER_DEPLOY_HOOK_URL);
+            if (!['postgres:', 'postgresql:'].includes(db.protocol) ||
+                decodeURIComponent(db.username) !== 'observatorio_migrator' ||
+                !db.password || !db.hostname.endsWith('.neon.tech') ||
+                db.hostname.includes('-pooler') || db.pathname.length < 2 ||
+                db.searchParams.get('sslmode') !== 'require' ||
+                hook.protocol !== 'https:' || hook.hostname !== 'api.render.com' ||
+                hook.port || hook.username || hook.password || hook.hash ||
+                !/^\/deploy\/srv-[A-Za-z0-9]+$/.test(hook.pathname) ||
+                !hook.searchParams.get('key')) throw new Error();
+          } catch {
+            console.error('Invalid deployment secrets: require direct Neon migrator (sslmode=require) and Render deploy hook.');
+            process.exit(1);
+          }
+          NODE
+
+      - name: Recheck main before migration
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            if (data.commit.sha !== context.payload.workflow_run.head_sha) {
+              core.setFailed('main changed during setup. No migration or deploy.');
+            }
+
+      - name: Apply migrations
+        env:
+          MIGRATOR_DATABASE_URL: ${{ secrets.MIGRATOR_DATABASE_URL }}
+        run: |
+          # No codegen against production; generated types belong to the reviewed commit.
+          # Hide driver diagnostics, which may contain connection details.
+          log="$RUNNER_TEMP/observatorio-migration.log"
+          trap 'rm -f "$log"' EXIT
+          if node --import tsx src/db/migrate.ts >"$log" 2>&1; then
+            echo 'Migrations completed.'
+          else
+            echo '::error::Migration failed; deploy blocked. Diagnose privately with the operator.'
+            exit 1
+          fi
+
+      - name: Recheck main before deploy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getBranch({ ...context.repo, branch: 'main' });
+            if (data.commit.sha !== context.payload.workflow_run.head_sha) {
+              core.setFailed('main changed during migration. Schema retained; no deploy.');
+            }
+
+      - name: Request Render deploy of approved SHA
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          try {
+            const url = new URL(process.env.RENDER_DEPLOY_HOOK_URL);
+            url.searchParams.set('ref', process.env.DEPLOY_SHA);
+            const response = await fetch(url, {
+              method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
+            });
+            if (!response.ok) throw new Error();
+            console.log('Render accepted the deploy request; verify rollout and health in Render.');
+          } catch {
+            console.error('Render deploy request failed or timed out; inspect Render before retrying.');
+            process.exit(1);
+          }
+          NODE
