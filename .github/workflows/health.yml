@@ -1,0 +1,30 @@
+name: Health and freshness
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: health-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # Manual dispatch must not run branch-modified code with the heartbeat secret.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify public health, source freshness and send success signal
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          HEALTHCHECKS_VERIFY_URL: ${{ secrets.HEALTHCHECKS_VERIFY_URL }}
+        run: node scripts/verify-health.mjs
