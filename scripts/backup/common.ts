@@ -19,6 +19,41 @@ export function localUrl(value: string | undefined, prefix?: string): URL {
   return url;
 }
 
+/** Source policy is deliberately Neon-specific: a host name cannot prove that an
+ * arbitrary proxy is direct. No query parameter may override host, TLS or login.
+ */
+export function backupSourceUrl(value: string | undefined, rehearsal: boolean): URL {
+  if (!value) throw new Error('Missing backup credential');
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error('Invalid backup URL'); }
+  if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.username ||
+      !url.pathname.slice(1) || url.hash ||
+      [...url.searchParams.keys()].some((key) => key !== 'sslmode') ||
+      url.searchParams.getAll('sslmode').length > 1) {
+    throw new Error('Unsupported backup connection configuration');
+  }
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+  if (loopback) {
+    if (!rehearsal) throw new Error('Loopback source requires explicit owned-cluster rehearsal');
+    // Explicit values avoid ambient PGPORT/PGSSLMODE defaults even in the harness.
+    url.port ||= '5432';
+    if (!url.searchParams.has('sslmode')) url.searchParams.set('sslmode', 'disable');
+    return url;
+  }
+  if (!/^ep-[a-z0-9-]+\.[a-z0-9-]+(?:\.[a-z0-9-]+)*\.neon\.tech$/.test(url.hostname) ||
+      /(?:^|-)pooler(?:-|$)/.test(url.hostname.split('.')[0]!) ||
+      (url.port && url.port !== '5432') || !url.password ||
+      !['require', 'verify-ca', 'verify-full'].includes(url.searchParams.get('sslmode') ?? '')) {
+    throw new Error('Remote backup requires direct Neon endpoint and TLS');
+  }
+  // Installed pg-connection-string treats require/verify-ca as verify-full aliases.
+  // Normalize explicitly: certificate and hostname verification stay on even if
+  // pg changes those aliases later or PGSSLMODE is set in the environment.
+  url.port = '5432';
+  url.searchParams.set('sslmode', 'verify-full');
+  return url;
+}
+
 export function client(url: string): Client {
   return new Client({ connectionString: url, connectionTimeoutMillis: 10_000,
     statement_timeout: 120_000, application_name: 'observatorio-backup' });

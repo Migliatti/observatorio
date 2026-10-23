@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
-import { checksum, client, localUrl, tool } from './common.js';
+import { backupSourceUrl, checksum, client, localUrl, tool } from './common.js';
 import { tables, revisionFields } from './tables.js';
 
 async function main(): Promise<void> {
@@ -12,7 +12,9 @@ async function main(): Promise<void> {
   const staging = localUrl(process.env.BACKUP_STAGING_DATABASE_URL);
   const stageName = `observatorio_backup_${randomUUID().replaceAll('-', '')}`;
   const admin = client(staging.href);
-  const source = client(process.env.BACKUP_DATABASE_URL ?? '');
+  const sourceUrl = backupSourceUrl(process.env.BACKUP_DATABASE_URL,
+    process.env.BACKUP_REHEARSAL_OWN_CLUSTER === 'yes');
+  const source = client(sourceUrl.href);
   const stageUrl = new URL(staging);
   stageUrl.pathname = `/${stageName}`;
   const stage = client(stageUrl.href);
@@ -27,6 +29,7 @@ async function main(): Promise<void> {
     await source.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const role = await source.query(`SELECT r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR
       r.rolreplication OR r.rolbypassrls AS elevated,
+      EXISTS (SELECT FROM pg_auth_members m WHERE m.member = r.oid) AS membership,
       has_database_privilege(current_user, current_database(), 'CREATE') AS db_create,
       has_schema_privilege(current_user, 'public', 'CREATE') AS schema_create,
       has_any_column_privilege(current_user, 'public.api_key', 'SELECT,INSERT,UPDATE,REFERENCES') OR

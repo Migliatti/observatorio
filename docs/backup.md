@@ -41,8 +41,56 @@ para tabelas futuras. A criação de banco temporário usa outra conexão, **som
 local ao runner**, nunca a credencial da origem. Não é necessário SELECT nas
 sequências da origem: seus próximos valores são reconstruídos por `max(id)`.
 O preflight verifica privilégios efetivos, escrita, CREATE e acesso a qualquer
-coluna de `api_key`; não basta confiar no nome do usuário. A ausência de memberships
-é também uma regra de provisionamento a ser verificada pelo administrador.
+coluna de `api_key`; não basta confiar no nome do usuário. O preflight rejeita
+**qualquer membership direta** do login em `pg_auth_members`, independentemente
+de INHERIT/SET. Sem membership direta não existe caminho transitivo para SET ROLE.
+`NOINHERIT` sozinho não satisfaz essa regra; a regressão exercita um caminho
+transitivo sem herança que alcança `observatorio_key_admin` por SET ROLE.
+
+## Checklist de provisionamento local para #13 / alinhamento com #28
+
+Preparação para revisão pelo responsável; **não marca a issue #13 como concluída**
+e não aplica alterações a nenhum serviço:
+
+- [ ] Criar login exclusivo `observatorio_backup` com os atributos mínimos e os
+  sete SELECTs acima; nenhuma membership, nem mesmo com INHERIT FALSE/SET FALSE.
+- [ ] Conferir `SELECT count(*) FROM pg_auth_members WHERE member =
+  'observatorio_backup'::regrole`: resultado esperado **0**; conferir ausência
+  de acesso a qualquer coluna de `api_key`, de escrita e de CREATE.
+- [ ] Definir senha exclusiva por canal seguro e criar **`BACKUP_DATABASE_URL`**
+  no destino **GitHub Actions secrets**. Role: **`observatorio_backup`**.
+  Não reutilizar credenciais de API, coleta, gestão de chaves ou migrations.
+- [ ] Usar endpoint **direto Neon**: hostname `ep-….<região>.<provedor>.neon.tech`,
+  sem token `-pooler`, porta 5432 e banco/usuário/senha explícitos. O validador
+  deliberadamente não aceita provedores ou proxies arbitrários como “diretos”.
+- [ ] Incluir exatamente um `sslmode=require`, `sslmode=verify-full` ou
+  `sslmode=verify-ca` na URL. Preferir **`sslmode=verify-full`**. Não incluir outros
+  parâmetros: `host`, `ssl`, `sslrootcert`, `uselibpqcompat`, parâmetros duplicados
+  e opções similares são rejeitados antes de criar o cliente, sem ler arquivos.
+  Se a URL gerada contiver `channel_binding=require`, não copiar esse parâmetro
+  libpq para este cliente `pg`; o suporte programático desse recurso é separado.
+- [ ] Revisar os campos públicos permitidos e validar uma primeira execução no
+  Actions somente após autorização. Registrar sucesso, contagens e retenção sem
+  expor URL, senha ou tokens; a validação remota permanece pendente.
+
+A política de origem é implementada em `backupSourceUrl` antes da conexão.
+Sem `sslmode`, com `disable`/`prefer`/`allow`/`no-verify`, com endpoint pooled ou
+com parâmetro capaz de sobrescrever conexão/TLS, ela falha. A variável de ensaio
+**não relaxa nenhuma regra remota**. Loopback é permitido exclusivamente quando
+`BACKUP_REHEARSAL_OWN_CLUSTER=yes`; o workflow não define essa variável. A URL
+loopback também não permite query overrides de host ou conexão.
+
+O código instalado de `pg-connection-string` trata `require` e `verify-ca` como
+aliases de `verify-full`. A política normaliza os três valores para **verify-full**
+antes de entregar a URL ao `pg`: TLS obrigatório, validação de certificado e
+hostname segundo o `pg`/Node, sem depender de uma futura mudança nos aliases.
+Não há modo remoto sem validação nem carregamento de CA/chave de arquivos via URL.
+A regressão inspeciona o SSL produzido pelo parser real instalado e comprova que
+esse modo recusa o servidor PG18 sintético que não oferece SSL. Não estabelece
+conexão com Neon para testar esses casos.
+
+Referências: [endpoints pooled Neon](https://neon.com/docs/connect/connection-pooling)
+e [configuração SSL do node-postgres](https://node-postgres.com/features/ssl).
 
 ## O que cobre
 
@@ -246,3 +294,35 @@ blocos `run` passaram por `bash -n`. O adaptador Docker do workflow não foi exe
 localmente pela ausência de daemon; sua validação no Actions continua pendente de
 integração, credencial dedicada e autorização para uma primeira execução real.
 Não foram executadas suites que usam banco compartilhado nem modificado CI geral.
+
+## Correção da revisão independente — 22/10/2026
+
+Os dois P2 foram corrigidos no mesmo floor: validação de transporte/endpoint da
+origem e rejeição de toda membership do login. Nenhuma role/migration existente,
+secret, produção ou CI geral foi alterado. O checklist de #13 acima acrescenta o
+login e o destino de `BACKUP_DATABASE_URL` sem publicar comentários ou editar issue.
+
+A regressão de membership foi executada **antes** da correção: o backup terminou
+com sucesso indevidamente para um login que tinha apenas leitura efetiva, mas
+alcançava `observatorio_key_admin` por duas memberships `INHERIT FALSE, SET TRUE`.
+O teste falhou como esperado. Depois da correção o mesmo caso foi rejeitado.
+
+Ensaio completo após a correção: **exit 0**, PostgreSQL **18.0**, cluster próprio
+`observatorio-30-cluster.Iwgsex`, porta livre **49262**. Além das verificações
+anteriores de histórico/chaves/restauração, passaram:
+
+```text
+PASS remote source requires TLS and direct Neon endpoint; query overrides and remote rehearsal bypass rejected
+PASS installed pg TLS mode refuses plaintext owned PG18 server
+PASS non-inherited transitive SET ROLE membership rejected before export
+```
+
+A matriz de URLs remotas testa apenas a política **sem rede**: modos TLS
+permitidos e proibidos, host pooled, sufixo de domínio falso, porta de pooler,
+overrides de host/SSL e parâmetros duplicados. Testa tanto com a flag de ensaio
+ligada quanto desligada. A negociação TLS negativa e o caminho SET ROLE são
+executados no servidor local PG18 próprio. Nenhum teste abre conexão remota.
+Lint sem warnings, TypeScript estrito e diff sem erros também passaram.
+O harness encerrou o cluster pelo trap; log de desligamento conferido. O adaptador
+Docker/Actions e a conexão TLS real ao Neon continuam pendentes, sem ampliação
+da autorização desta entrega.
