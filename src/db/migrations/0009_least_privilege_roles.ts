@@ -29,6 +29,21 @@ export async function up(db: Kysely<unknown>): Promise<void> {
             raise exception 'Migration 0009 cannot alter pre-existing SUPERUSER role "%" as a non-superuser; run with a superuser connection or have an administrator correct the role first.', existing_role;
           end if;
 
+          if exists (
+            select from pg_roles target
+            where target.rolname = existing_role
+              and (target.rolbypassrls or target.rolreplication)
+          ) then
+            raise exception 'Migration 0009 cannot alter pre-existing BYPASSRLS or REPLICATION role "%" as a non-superuser; have an administrator remove those attributes first.', existing_role;
+          end if;
+
+          if exists (
+            select from pg_roles target
+            where target.rolname = existing_role and target.rolcreatedb
+          ) and not (select rolcreatedb from pg_roles where rolname = current_user) then
+            raise exception 'Migration 0009 cannot remove CREATEDB from pre-existing role "%": current role "%" needs CREATEDB; have an administrator remove that attribute first.', existing_role, current_user;
+          end if;
+
           if exists (select from pg_roles where rolname = existing_role)
             and not exists (
               select from pg_auth_members membership
@@ -47,24 +62,60 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     do $roles$
     begin
       if not exists (select from pg_roles where rolname = 'observatorio_migrator') then
-        create role observatorio_migrator login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_migrator login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
-        alter role observatorio_migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_migrator with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
+        else
+          -- Mentioning restricted attributes requires the corresponding privilege.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_migrator with login nocreaterole noinherit;
+          if (select rolcreatedb from pg_roles where rolname = current_user) then
+            alter role observatorio_migrator nocreatedb;
+          end if;
+        end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_collector') then
-        create role observatorio_collector login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_collector login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
-        alter role observatorio_collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_collector with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
+        else
+          -- Mentioning restricted attributes requires the corresponding privilege.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_collector with login nocreaterole noinherit;
+          if (select rolcreatedb from pg_roles where rolname = current_user) then
+            alter role observatorio_collector nocreatedb;
+          end if;
+        end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_api') then
-        create role observatorio_api login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_api login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
-        alter role observatorio_api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_api with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
+        else
+          -- Mentioning restricted attributes requires the corresponding privilege.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_api with login nocreaterole noinherit;
+          if (select rolcreatedb from pg_roles where rolname = current_user) then
+            alter role observatorio_api nocreatedb;
+          end if;
+        end if;
       end if;
       if not exists (select from pg_roles where rolname = 'observatorio_key_admin') then
-        create role observatorio_key_admin login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        create role observatorio_key_admin login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
       else
-        alter role observatorio_key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+        if (select rolsuper from pg_roles where rolname = current_user) then
+          alter role observatorio_key_admin with login nosuperuser nocreatedb nocreaterole noinherit nobypassrls noreplication;
+        else
+          -- Mentioning restricted attributes requires the corresponding privilege.
+          -- The preflight already rejects existing elevated service roles.
+          alter role observatorio_key_admin with login nocreaterole noinherit;
+          if (select rolcreatedb from pg_roles where rolname = current_user) then
+            alter role observatorio_key_admin nocreatedb;
+          end if;
+        end if;
       end if;
     end
     $roles$;
