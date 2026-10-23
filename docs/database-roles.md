@@ -40,6 +40,12 @@ roles existentes com `SUPERUSER`, `BYPASSRLS` ou `REPLICATION` antes de alterar 
 role; um administrador precisa corrigir esses atributos primeiro. As roles novas
 continuam sendo criadas com privilégios mínimos.
 
+`CREATEDB` não é exigido do bootstrap quando os papéis de serviço já têm `NOCREATEDB`:
+nesse caso, o `ALTER ROLE` omite o atributo. Se algum papel existente tiver `CREATEDB`,
+o preflight exige que o bootstrap também possua esse privilégio para removê-lo;
+caso contrário, falha antes de alterar qualquer papel e orienta a correção por um
+administrador. O caminho superuser continua removendo os atributos elevados.
+
 ## Senhas e destino dos segredos
 
 No bootstrap validado no Neon, o painel recusou redefinir senhas de roles ainda sem
