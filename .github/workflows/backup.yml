@@ -1,0 +1,74 @@
+name: Historical backup
+
+on:
+  schedule:
+    - cron: '23 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: historical-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    # Manual dispatch may select a branch; credentials only reach main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      staging:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: backup_staging
+          # Ephemeral local service only; never a source/production credential.
+          POSTGRES_PASSWORD: local-staging-only
+          POSTGRES_DB: postgres
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U backup_staging -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: PostgreSQL 18 client
+        # The image supplies a compatible pg_dump regardless of runner packages.
+        run: |
+          mkdir -p "$RUNNER_TEMP/pg18-bin"
+          cat > "$RUNNER_TEMP/pg18-bin/pg_dump" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            -e PGDATABASE -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGSSLMODE -e PGCONNECT_TIMEOUT \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -v /tmp:/tmp \
+            -w "$GITHUB_WORKSPACE" postgres:18-alpine pg_dump "$@"
+          SH
+          chmod 700 "$RUNNER_TEMP/pg18-bin/pg_dump"
+          echo "$RUNNER_TEMP/pg18-bin" >> "$GITHUB_PATH"
+      - name: Copy approved data and dump local staging database
+        env:
+          # Dedicated SELECT-only login. Do not use migrator, owner, API or collector URL.
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_STAGING_DATABASE_URL: postgres://backup_staging:local-staging-only@127.0.0.1:5432/postgres
+        run: node --import tsx scripts/backup/create.ts historical.dump
+      - uses: actions/upload-artifact@v4
+        with:
+          name: historical-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            historical.dump
+            historical.dump.sha256
+            historical.dump.json
+          if-no-files-found: error
+          retention-days: 21
+          compression-level: 0
